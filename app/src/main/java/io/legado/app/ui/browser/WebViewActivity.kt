@@ -30,6 +30,7 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.http.CookieStore
 import io.legado.app.help.source.SourceVerificationHelp
 import io.legado.app.lib.dialogs.SelectItem
+import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.model.Download
 import io.legado.app.ui.association.OnLineImportActivity
@@ -47,6 +48,7 @@ import io.legado.app.utils.toggleNavigationBar
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import io.legado.app.utils.visible
 import java.net.URLDecoder
+import io.legado.app.help.http.CookieManager as AppCookieManager
 
 class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
 
@@ -101,6 +103,14 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
         return super.onCompatCreateOptionsMenu(menu)
     }
 
+    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
+        if (viewModel.sourceOrigin.isNotEmpty()) {
+            menu.findItem(R.id.menu_disable_source)?.isVisible = true
+            menu.findItem(R.id.menu_delete_source)?.isVisible = true
+        }
+        return super.onPrepareOptionsMenu(menu)
+    }
+
     override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
             R.id.menu_open_in_browser -> openUrl(viewModel.baseUrl)
@@ -116,6 +126,23 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
             }
 
             R.id.menu_full_screen -> toggleFullScreen()
+            R.id.menu_disable_source -> {
+                viewModel.disableSource {
+                    finish()
+                }
+            }
+
+            R.id.menu_delete_source -> {
+                alert(R.string.draw) {
+                    setMessage(getString(R.string.sure_del) + "\n" + viewModel.sourceName)
+                    noButton()
+                    yesButton {
+                        viewModel.deleteSource {
+                            finish()
+                        }
+                    }
+                }
+            }
         }
         return super.onCompatOptionsItemSelected(item)
     }
@@ -171,8 +198,7 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
                 userAgentString = it
             }
         }
-        val cookieManager = CookieManager.getInstance()
-        cookieManager.setCookie(url, CookieStore.getCookie(url))
+        AppCookieManager.applyToWebView(url)
         binding.webView.addJavascriptInterface(this, "app")
         binding.webView.setOnLongClickListener {
             val hitTestResult = binding.webView.hitTestResult

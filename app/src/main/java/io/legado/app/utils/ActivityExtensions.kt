@@ -189,6 +189,18 @@ fun Activity.toggleNavigationBar(show: Boolean) {
     }
 }
 
+fun Activity.toggleStatusBar(show: Boolean) {
+    WindowCompat.getInsetsController(window, window.decorView).run {
+        if (show) {
+            show(WindowInsetsCompat.Type.statusBars())
+            systemBarsBehavior = BEHAVIOR_DEFAULT
+        } else {
+            hide(WindowInsetsCompat.Type.statusBars())
+            systemBarsBehavior = BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
+    }
+}
+
 /////以下方法需要在View完全被绘制出来之后调用，否则判断不了,在比如 onWindowFocusChanged（）方法中可以得到正确的结果/////
 
 /**
