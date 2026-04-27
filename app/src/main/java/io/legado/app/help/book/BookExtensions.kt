@@ -3,9 +3,11 @@
 package io.legado.app.help.book
 
 import android.net.Uri
+import androidx.core.net.toUri
 import com.script.buildScriptBindings
 import com.script.rhino.RhinoScriptEngine
 import io.legado.app.constant.AppLog
+import io.legado.app.constant.AppPattern
 import io.legado.app.constant.BookSourceType
 import io.legado.app.constant.BookType
 import io.legado.app.data.appDb
@@ -13,13 +15,17 @@ import io.legado.app.data.entities.BaseBook
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookSource
 import io.legado.app.exception.NoStackTraceException
+import io.legado.app.help.RuleBigDataHelp
 import io.legado.app.help.config.AppConfig
 import io.legado.app.model.localBook.LocalBook
 import io.legado.app.utils.FileDoc
+import io.legado.app.utils.GSON
+import io.legado.app.utils.MD5Utils
 import io.legado.app.utils.exists
 import io.legado.app.utils.find
 import io.legado.app.utils.inputStream
 import io.legado.app.utils.isUri
+import io.legado.app.utils.normalizeFileName
 import io.legado.app.utils.toastOnUi
 import splitties.init.appCtx
 import java.io.File
@@ -109,7 +115,7 @@ fun Book.getLocalUri(): Uri {
         return uri
     }
     uri = if (bookUrl.isUri()) {
-        Uri.parse(bookUrl)
+        bookUrl.toUri()
     } else {
         Uri.fromFile(File(bookUrl))
     }
@@ -125,12 +131,12 @@ fun Book.getLocalUri(): Uri {
 
     // 查找书籍保存目录
     if (!defaultBookDir.isNullOrBlank()) {
-        val treeUri = Uri.parse(defaultBookDir)
+        val treeUri = defaultBookDir.toUri()
         val treeFileDoc = FileDoc.fromUri(treeUri, true)
         if (!treeFileDoc.exists()) {
             appCtx.toastOnUi("书籍保存目录失效，请重新设置！")
         } else {
-            val fileDoc = treeFileDoc.find(originName, 5)
+            val fileDoc = treeFileDoc.find(originName, 5, 100)
             if (fileDoc != null) {
                 localUriCache[bookUrl] = fileDoc.uri
                 //更新bookUrl 重启不用再找一遍
@@ -144,12 +150,12 @@ fun Book.getLocalUri(): Uri {
     // 查找添加本地选择的目录
     if (!importBookDir.isNullOrBlank() && defaultBookDir != importBookDir) {
         val treeUri = if (importBookDir.isUri()) {
-            Uri.parse(importBookDir)
+            importBookDir.toUri()
         } else {
             Uri.fromFile(File(importBookDir))
         }
         val treeFileDoc = FileDoc.fromUri(treeUri, true)
-        val fileDoc = treeFileDoc.find(originName, 5)
+        val fileDoc = treeFileDoc.find(originName, 5, 100)
         if (fileDoc != null) {
             localUriCache[bookUrl] = fileDoc.uri
             bookUrl = fileDoc.toString()
@@ -166,7 +172,7 @@ fun Book.getLocalUri(): Uri {
 fun Book.getArchiveUri(): Uri? {
     val defaultBookDir = AppConfig.defaultBookTreeUri
     return if (isArchive && !defaultBookDir.isNullOrBlank()) {
-        FileDoc.fromUri(Uri.parse(defaultBookDir), true)
+        FileDoc.fromUri(defaultBookDir.toUri(), true)
             .find(archiveName)?.uri
     } else {
         null
@@ -229,15 +235,6 @@ fun Book.upType() {
     }
 }
 
-fun BookSource.getBookType(): Int {
-    return when (bookSourceType) {
-        BookSourceType.file -> BookType.text or BookType.webFile
-        BookSourceType.image -> BookType.image
-        BookSourceType.audio -> BookType.audio
-        else -> BookType.text
-    }
-}
-
 fun Book.sync(oldBook: Book) {
     val curBook = appDb.bookDao.getBook(oldBook.bookUrl)!!
     durChapterTime = curBook.durChapterTime
@@ -250,10 +247,46 @@ fun Book.sync(oldBook: Book) {
         }
     }
     canUpdate = curBook.canUpdate
+    readConfig = curBook.readConfig
 }
 
 fun Book.update() {
     appDb.bookDao.update(this)
+}
+
+fun Book.primaryStr(): String {
+    return origin + bookUrl
+}
+
+fun Book.updateTo(newBook: Book): Book {
+    newBook.durChapterIndex = durChapterIndex
+    newBook.durChapterTitle = durChapterTitle
+    newBook.durChapterPos = durChapterPos
+    newBook.durChapterTime = durChapterTime
+    newBook.group = group
+    newBook.order = order
+    newBook.customCoverUrl = customCoverUrl
+    newBook.customIntro = customIntro
+    newBook.customTag = customTag
+    newBook.canUpdate = canUpdate
+    newBook.readConfig = readConfig
+    val variableMap = variableMap.toMutableMap()
+    variableMap.keys.removeIf {
+        newBook.hasVariable(it)
+    }
+    newBook.variableMap.putAll(variableMap)
+    newBook.variable = GSON.toJson(newBook.variableMap)
+    return newBook
+}
+
+fun Book.hasVariable(key: String): Boolean {
+    return variableMap.contains(key) || RuleBigDataHelp.hasBookVariable(bookUrl, key)
+}
+
+fun Book.getFolderNameNoCache(): String {
+    return name.replace(AppPattern.fileNameRegex, "").let {
+        it.substring(0, min(9, it.length)) + MD5Utils.md5Encode16(bookUrl)
+    }
 }
 
 fun Book.getBookSource(): BookSource? {
@@ -315,14 +348,14 @@ fun Book.getExportFileName(
         RhinoScriptEngine.eval(jsStr, bindings).toString() + "." + suffix
     }.onFailure {
         AppLog.put("导出书名规则错误,使用默认规则\n${it.localizedMessage}", it)
-    }.getOrDefault(default)
+    }.getOrDefault(default).normalizeFileName()
 }
 
 // 根据当前日期计算章节总数
 fun Book.simulatedTotalChapterNum(): Int {
     return if (readSimulating()) {
         val currentDate = LocalDate.now()
-        val daysPassed = between(this.config.startDate, currentDate).days + 1
+        val daysPassed = between(config.startDate, currentDate).days + 1
         // 计算当前应该解锁到哪一章
         val chaptersToUnlock =
             max(0, (config.startChapter ?: 0) + (daysPassed * config.dailyChapters))

@@ -123,7 +123,7 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
                 items = resources.getStringArray(R.array.indent).toList()
             ) { _, index ->
                 ReadBookConfig.paragraphIndent = "　".repeat(index)
-                postEvent(EventBus.UP_CONFIG, arrayListOf(5))
+                postEvent(EventBus.UP_CONFIG, arrayListOf(8, 5))
             }
         }
         tvPadding.setOnClickListener {
@@ -134,7 +134,7 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
             TipConfigDialog().show(childFragmentManager, "tipConfigDialog")
         }
         rgPageAnim.setOnCheckedChangeListener { _, checkedId ->
-            ReadBook.book?.setPageAnim(null)
+            ReadBook.book?.setPageAnim(-1)
             ReadBookConfig.pageAnim = binding.rgPageAnim.getIndexById(checkedId)
             callBack?.upPageAnim()
             ReadBook.loadContent(false)
@@ -202,7 +202,7 @@ class ReadStyleDialog : BaseDialogFragment(R.layout.dialog_read_book_style),
         get() = ReadBookConfig.textFont
 
     override fun selectFont(path: String) {
-        if (path != ReadBookConfig.textFont) {
+        if (path != ReadBookConfig.textFont || path.isEmpty()) {
             ReadBookConfig.textFont = path
             postEvent(EventBus.UP_CONFIG, arrayListOf(2, 5))
         }

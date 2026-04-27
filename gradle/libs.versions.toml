@@ -1,55 +1,77 @@
 [versions]
 
-kotlin = "2.0.20"
-ksp = "2.0.20-1.0.24"
-agp = "8.6.0"
-appcompat = "1.7.0"
+kotlin = "2.3.0"
+ksp = "2.3.4"
+agp = "8.13.2"
+appcompat = "1.7.1"
 colorpicker = "1.1.0"
-commonsText = "1.12.0"
-constraintlayout = "2.1.4"
-core = "1.13.1"
-firebaseBom = "33.2.0"
+constraintlayout = "2.2.1"
+core = "1.17.0"
 flexbox = "3.0.0"
-fragment = "1.8.2"
+fragment = "1.8.9"
+documentfile = "1.1.0"
 
-#不要更新版本
-hutool = "5.8.22"
-
-libarchive = "1.1.0"
-lifecycle = "2.8.4"
-glide = "4.16.0"
-gson = "2.11.0"
-jsonPath = "2.9.0"
-# issue #3811，不要更新版本，新版引入了一个破坏性变更（详见https://github.com/jhy/jsoup/pull/2017）
-# 若要升级请确保相关代码不会受此变更影响（如AnalyzeByJSoup.kt、JsoupXpath库等）
-jsoup = "1.16.2"
+libarchive = "1.1.6"
+glide = "5.0.5"
+gson = "2.13.2"
+jsonPath = "2.10.0"
 jsoupxpath = "2.5.3"
-coroutines = "1.8.1"
+coroutines = "1.10.2"
 liveeventbus = "1.8.14"
 markwon = "4.6.2"
-material = "1.12.0"
-media = "1.7.0"
-media3 = "1.4.1"
+material = "1.13.0"
+media = "1.7.1"
 nanoHttpd = "2.3.1"
-okhttp = "4.12.0"
+okhttp = "5.3.2"
 preference = "1.2.1"
-protobufJavalite = "4.26.1"
-quickChineseTransfer = "0.2.13"
-room = "2.6.1"
-splitties = "3.0.0"
-rhino = "1.7.15"
-desugar = "2.0.4"
+quickChineseTransfer = "0.2.16"
 
-activity = "1.9.1"
-kotlinxSerialization = "1.7.1"
-swiperefreshlayout = "1.1.0"
+splitties = "3.0.0"
+desugar = "2.1.5"
+
+#kotlinxSerialization = "1.8.0"
+swiperefreshlayout = "1.2.0"
+collection = "1.5.0"
+
+zxingLite = "3.3.0"
+
+#不要更新版本
+#noinspection NewerVersionAvailable
+hutool = "5.8.22"
+
+#noinspection NewerVersionAvailable
+protobufJavalite = "4.26.1"
+
+# issue #3811，不要更新版本，新版引入了一个破坏性变更（详见https://github.com/jhy/jsoup/pull/2017）
+# 若要升级请确保相关代码不会受此变更影响（如AnalyzeByJSoup.kt、JsoupXpath库等）
+#noinspection NewerVersionAvailable
+jsoup = "1.16.2"
+
+# 新版本使用了 Android 6 以下缺少的 Arrays.setAll 方法，导致进入阅读界面会崩溃
+#noinspection GradleDependency,NewerVersionAvailable
+commonsText = "1.13.1"
+
+# 新版本使用了 Android 8 以下无法编译的 VarHandle.compareAndExchange 方法
+#noinspection GradleDependency
+rhino = "1.8.1"
+
+#noinspection GradleDependency,NewerVersionAvailable
+media3 = "1.8.0"
+
+#noinspection GradleDependency
+webkit = "1.14.0"
+#noinspection GradleDependency
+activity = "1.11.0"
+#noinspection GradleDependency
+lifecycle = "2.9.4"
+#noinspection GradleDependency
+room = "2.7.1"
 #noinspection GradleDependency
 recyclerview = "1.2.0"
 #noinspection GradleDependency
 viewpager2 = "1.0.0"
-webkit = "1.11.0"
-zxingLite = "3.2.0"
-
+#noinspection GradleDependency
+firebaseBom = "33.2.0"
 
 [libraries]
 
@@ -57,9 +79,10 @@ activity-activity = { module = "androidx.activity:activity", version.ref = "acti
 activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activity" }
 activity-ktx = { module = "androidx.activity:activity-ktx", version.ref = "activity" }
 
-androidx-annotation = { group = "androidx.annotation", name = "annotation", version = "1.8.2" }
+androidx-annotation = { group = "androidx.annotation", name = "annotation", version = "1.9.1" }
 #androidx-annotation-experimental = { group = "androidx.annotation", name = "annotation-experimental", version = "1.3.1" }
 
+androidx-collection = { module = "androidx.collection:collection", version.ref = "collection" }
 appcompat-appcompat = { module = "androidx.appcompat:appcompat", version.ref = "appcompat" }
 androidx-constraintlayout = { module = "androidx.constraintlayout:constraintlayout", version.ref = "constraintlayout" }
 
@@ -115,6 +138,8 @@ room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
 room-testing = { module = "androidx.room:room-testing", version.ref = "room" }
 
 glide-glide = { module = "com.github.bumptech.glide:glide", version.ref = "glide" }
+glide-okhttp = { module = "com.github.bumptech.glide:okhttp3-integration", version.ref = "glide" }
+glide-recyclerview = { module = "com.github.bumptech.glide:recyclerview-integration", version.ref = "glide" }
 glide-compiler = { module = "com.github.bumptech.glide:compiler", version.ref = "glide" }
 glide-compose = { module = "com.github.bumptech.glide:compose", version = "1.0.0-beta01" }
 glide-ksp = { module = "com.github.bumptech.glide:ksp", version.ref = "glide" }
@@ -133,6 +158,7 @@ androidx-swiperefreshlayout = { module = "androidx.swiperefreshlayout:swiperefre
 androidx-recyclerview = { module = "androidx.recyclerview:recyclerview", version.ref = "recyclerview" }
 androidx-viewpager2 = { module = "androidx.viewpager2:viewpager2", version.ref = "viewpager2" }
 androidx-webkit = { module = "androidx.webkit:webkit", version.ref = "webkit" }
+androidx-documentfile = { module = "androidx.documentfile:documentfile", version.ref = "documentfile" }
 colorpicker = { module = "com.jaredrummler:colorpicker", version.ref = "colorpicker" }
 commons-text = { module = "org.apache.commons:commons-text", version.ref = "commonsText" }
 desugar = { group = "com.android.tools", name = "desugar_jdk_libs_nio", version.ref = "desugar" }
@@ -150,14 +176,14 @@ kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "
 kotlin-reflect = { module = "org.jetbrains.kotlin:kotlin-reflect", version.ref = "kotlin" }
 
 
-kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
-kotlinx-serialization-protobuf = { module = "org.jetbrains.kotlinx:kotlinx-serialization-protobuf", version.ref = "kotlinxSerialization" }
+#kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
+#kotlinx-serialization-protobuf = { module = "org.jetbrains.kotlinx:kotlinx-serialization-protobuf", version.ref = "kotlinxSerialization" }
 liveeventbus = { module = "com.github.michaellee123:LiveEventBus", version.ref = "liveeventbus" }
 material = { module = "com.google.android.material:material", version.ref = "material" }
 
 mozilla-rhino = { module = "org.mozilla:rhino", version.ref = "rhino" }
 
-renderscript-intrinsics-replacement-toolkit = { module = "com.github.android:renderscript-intrinsics-replacement-toolkit", version = "b6363490c3" }
+renderscript-intrinsics-replacement-toolkit = { module = "com.github.TomasValenta:renderscript-intrinsics-replacement-toolkit", version = "8eaa829ddd" }
 zxing-lite = { module = "com.github.jenly1314:zxing-lite", version.ref = "zxingLite" }
 
 [bundles]
@@ -170,7 +196,7 @@ android-application = { id = "com.android.application", version.ref = "agp" }
 android-library = { id = "com.android.library", version.ref = "agp" }
 android-test = { id = "com.android.test", version.ref = "agp" }
 
-androidx-benchmark = { id = "androidx.benchmark", version = "1.3.0" }
+#androidx-benchmark = { id = "androidx.benchmark", version = "1.3.3" }
 
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
@@ -187,6 +213,6 @@ google-services = { id = "com.google.gms.google-services", version = "4.4.2" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 room = { id = "androidx.room", version.ref = "room" }
 
-protobuf = { id = "com.google.protobuf", version = "0.9.4" }
+#protobuf = { id = "com.google.protobuf", version = "0.9.4" }
 
 download = { id = "de.undercouch.download", version = "5.6.0" }

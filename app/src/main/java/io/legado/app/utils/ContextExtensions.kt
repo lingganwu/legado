@@ -38,7 +38,15 @@ import androidx.preference.PreferenceManager
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import io.legado.app.R
 import io.legado.app.constant.AppConst
+import io.legado.app.data.entities.Book
 import io.legado.app.help.IntentHelp
+import io.legado.app.help.book.isAudio
+import io.legado.app.help.book.isImage
+import io.legado.app.help.book.isLocal
+import io.legado.app.help.config.AppConfig
+import io.legado.app.ui.book.audio.AudioPlayActivity
+import io.legado.app.ui.book.manga.ReadMangaActivity
+import io.legado.app.ui.book.read.ReadBookActivity
 import splitties.systemservices.clipboardManager
 import splitties.systemservices.connectivityManager
 import splitties.systemservices.uiModeManager
@@ -53,6 +61,23 @@ inline fun <reified A : Activity> Context.startActivity(configIntent: Intent.() 
     startActivity(intent)
 }
 
+fun Context.startActivityForBook(
+    book: Book,
+    configIntent: Intent.() -> Unit = {},
+) {
+    val cls = when {
+        book.isAudio -> AudioPlayActivity::class.java
+        !book.isLocal && book.isImage && AppConfig.showMangaUi -> ReadMangaActivity::class.java
+        else -> ReadBookActivity::class.java
+    }
+    val intent = Intent(this, cls)
+    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    intent.putExtra("bookUrl", book.bookUrl)
+    intent.apply(configIntent)
+    startActivity(intent)
+}
+
+
 inline fun <reified T : Service> Context.startService(configIntent: Intent.() -> Unit = {}) {
     startService(Intent(this, T::class.java).apply(configIntent))
 }
@@ -65,7 +90,7 @@ inline fun <reified T : Service> Context.stopService() {
 inline fun <reified T : Service> Context.servicePendingIntent(
     action: String,
     requestCode: Int = 0,
-    configIntent: Intent.() -> Unit = {}
+    configIntent: Intent.() -> Unit = {},
 ): PendingIntent? {
     val intent = Intent(this, T::class.java)
     intent.action = action
@@ -81,7 +106,7 @@ inline fun <reified T : Service> Context.servicePendingIntent(
 @SuppressLint("UnspecifiedImmutableFlag")
 fun Context.activityPendingIntent(
     intent: Intent,
-    action: String
+    action: String,
 ): PendingIntent? {
     intent.action = action
     val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -95,7 +120,7 @@ fun Context.activityPendingIntent(
 @SuppressLint("UnspecifiedImmutableFlag")
 inline fun <reified T : Activity> Context.activityPendingIntent(
     action: String,
-    configIntent: Intent.() -> Unit = {}
+    configIntent: Intent.() -> Unit = {},
 ): PendingIntent? {
     val intent = Intent(this, T::class.java)
     intent.action = action
@@ -111,7 +136,7 @@ inline fun <reified T : Activity> Context.activityPendingIntent(
 @SuppressLint("UnspecifiedImmutableFlag")
 inline fun <reified T : BroadcastReceiver> Context.broadcastPendingIntent(
     action: String,
-    configIntent: Intent.() -> Unit = {}
+    configIntent: Intent.() -> Unit = {},
 ): PendingIntent? {
     val intent = Intent(this, T::class.java)
     intent.action = action
@@ -161,7 +186,7 @@ fun Context.putPrefString(key: String, value: String?) =
 
 fun Context.getPrefStringSet(
     key: String,
-    defValue: MutableSet<String>? = null
+    defValue: MutableSet<String>? = null,
 ): MutableSet<String>? = defaultSharedPreferences.getStringSet(key, defValue)
 
 fun Context.putPrefStringSet(key: String, value: MutableSet<String>) =
@@ -255,7 +280,7 @@ fun Context.share(file: File, type: String = "text/*") {
 fun Context.shareWithQr(
     text: String,
     title: String = getString(R.string.share),
-    errorCorrectionLevel: ErrorCorrectionLevel = ErrorCorrectionLevel.H
+    errorCorrectionLevel: ErrorCorrectionLevel = ErrorCorrectionLevel.H,
 ) {
     val bitmap = QRCodeUtils.createQRCode(text, errorCorrectionLevel = errorCorrectionLevel)
     if (bitmap == null) {
@@ -349,6 +374,8 @@ fun Context.openFileUri(uri: Uri, type: String? = null) {
         //7.0版本以上
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
+    val uri = if (uri.isContentScheme()) uri
+    else FileProvider.getUriForFile(this, AppConst.authority, File(uri.path!!))
     intent.setDataAndType(uri, type ?: IntentType.from(uri))
     try {
         startActivity(intent)

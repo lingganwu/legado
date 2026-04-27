@@ -6,6 +6,7 @@ import cn.hutool.crypto.digest.HMac
 import cn.hutool.crypto.symmetric.SymmetricCrypto
 import io.legado.app.help.crypto.AsymmetricCrypto
 import io.legado.app.help.crypto.Sign
+import io.legado.app.help.crypto.SymmetricCryptoAndroid
 import io.legado.app.utils.MD5Utils
 
 
@@ -13,6 +14,7 @@ import io.legado.app.utils.MD5Utils
  * js加解密扩展类, 在js中通过java变量调用
  * 添加方法，请更新文档/legado/app/src/main/assets/help/JsHelp.md
  */
+@Suppress("unused")
 interface JsEncodeUtils {
 
     fun md5Encode(str: String): String {

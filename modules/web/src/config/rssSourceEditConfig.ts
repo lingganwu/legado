@@ -52,12 +52,12 @@ export default {
         type: 'String',
         hint: '自定义登录界面',
       },
-      {
-        title: '登录检测',
-        id: 'loginCheckJs',
-        type: 'String',
-        hint: '登录检测js',
-      },
+      // {
+      //   title: '登录检测',
+      //   id: 'loginCheckJs',
+      //   type: 'String',
+      //   hint: '登录检测js',
+      // },
       {
         title: '封面解密',
         id: 'coverDecodeJs',
@@ -81,6 +81,12 @@ export default {
         id: 'concurrentRate',
         type: 'String',
         hint: '并发率',
+      },
+      {
+        title: 'js库',
+        id: 'jsLib',
+        type: 'String',
+        hint: 'js库, 可填写js或者key-value object获取在线js文件',
       },
     ],
   },

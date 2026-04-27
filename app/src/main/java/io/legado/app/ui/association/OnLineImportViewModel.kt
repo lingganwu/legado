@@ -5,6 +5,7 @@ import androidx.core.net.toUri
 import io.legado.app.R
 import io.legado.app.constant.AppConst
 import io.legado.app.help.config.ReadBookConfig
+import io.legado.app.help.http.decompressed
 import io.legado.app.help.http.newCallResponseBody
 import io.legado.app.help.http.okHttpClient
 import io.legado.app.help.http.text
@@ -24,7 +25,7 @@ class OnLineImportViewModel(app: Application) : BaseAssociationViewModel(app) {
                 } else {
                     url(url)
                 }
-            }.text("utf-8")
+            }.decompressed().text("utf-8")
         }.onSuccess {
             success.invoke(it)
         }.onError {
@@ -55,7 +56,7 @@ class OnLineImportViewModel(app: Application) : BaseAssociationViewModel(app) {
 
     fun importReadConfig(bytes: ByteArray, finally: (title: String, msg: String) -> Unit) {
         execute {
-            val config = ReadBookConfig.import(bytes).getOrThrow()
+            val config = ReadBookConfig.import(bytes)
             ReadBookConfig.configList.forEachIndexed { index, c ->
                 if (c.name == config.name) {
                     ReadBookConfig.configList[index] = config

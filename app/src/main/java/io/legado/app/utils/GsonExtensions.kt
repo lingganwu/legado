@@ -7,6 +7,7 @@ import com.google.gson.JsonDeserializer
 import com.google.gson.JsonElement
 import com.google.gson.JsonParseException
 import com.google.gson.JsonSyntaxException
+import com.google.gson.Strictness
 import com.google.gson.ToNumberPolicy
 import com.google.gson.internal.LinkedTreeMap
 import com.google.gson.reflect.TypeToken
@@ -49,6 +50,12 @@ val GSON: Gson by lazy {
         .create()
 }
 
+val GSONStrict: Gson by lazy {
+    GSON.newBuilder()
+        .setStrictness(Strictness.STRICT)
+        .create()
+}
+
 inline fun <reified T> genericType(): Type = object : TypeToken<T>() {}.type
 
 inline fun <reified T> Gson.fromJsonObject(json: String?): Result<T> {
@@ -65,10 +72,15 @@ inline fun <reified T> Gson.fromJsonArray(json: String?): Result<List<T>> {
         if (json == null) {
             throw JsonSyntaxException("解析字符串为空")
         }
-        fromJson(
-            json,
-            TypeToken.getParameterized(List::class.java, T::class.java).type
-        ) as List<T>
+        val type = TypeToken.getParameterized(List::class.java, T::class.java).type
+        val list = fromJson(json, type) as List<T?>
+        if (list.contains(null)) {
+            throw JsonSyntaxException(
+                "列表不能存在null元素，可能是json格式错误，通常为列表存在多余的逗号所致"
+            )
+        }
+        @Suppress("UNCHECKED_CAST")
+        list as List<T>
     }
 }
 
@@ -88,10 +100,15 @@ inline fun <reified T> Gson.fromJsonArray(inputStream: InputStream?): Result<Lis
             throw JsonSyntaxException("解析流为空")
         }
         val reader = InputStreamReader(inputStream)
-        fromJson(
-            reader,
-            TypeToken.getParameterized(List::class.java, T::class.java).type
-        ) as List<T>
+        val type = TypeToken.getParameterized(List::class.java, T::class.java).type
+        val list = fromJson(reader, type) as List<T?>
+        if (list.contains(null)) {
+            throw JsonSyntaxException(
+                "列表不能存在null元素，可能是json格式错误，通常为列表存在多余的逗号所致"
+            )
+        }
+        @Suppress("UNCHECKED_CAST")
+        list as List<T>
     }
 }
 
@@ -150,6 +167,7 @@ class IntJsonDeserializer : JsonDeserializer<Int?> {
                     null
                 }
             }
+
             else -> null
         }
     }
@@ -182,6 +200,7 @@ class MapDeserializerDoubleAsIntFix :
                 }
                 return list
             }
+
             json.isJsonObject -> {
                 val map: MutableMap<String, Any?> =
                     LinkedTreeMap()
@@ -193,15 +212,18 @@ class MapDeserializerDoubleAsIntFix :
                 }
                 return map
             }
+
             json.isJsonPrimitive -> {
                 val prim = json.asJsonPrimitive
                 when {
                     prim.isBoolean -> {
                         return prim.asBoolean
                     }
+
                     prim.isString -> {
                         return prim.asString
                     }
+
                     prim.isNumber -> {
                         val num: Number = prim.asNumber
                         // here you can handle double int/long values

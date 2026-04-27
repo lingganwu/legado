@@ -1,12 +1,10 @@
 package io.legado.app.ui.rss.source.edit
 
-import android.app.Activity
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
 import android.widget.EditText
 import androidx.activity.viewModels
-import androidx.core.view.ViewCompat
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.tabs.TabLayout
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
@@ -36,6 +34,7 @@ import io.legado.app.utils.launch
 import io.legado.app.utils.navigationBarHeight
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.setEdgeEffectColor
+import io.legado.app.utils.setOnApplyWindowInsetsListenerCompat
 import io.legado.app.utils.share
 import io.legado.app.utils.shareWithQr
 import io.legado.app.utils.showDialogFragment
@@ -127,7 +126,7 @@ class RssSourceEditActivity :
     override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
             R.id.menu_save -> viewModel.save(getRssSource()) {
-                setResult(Activity.RESULT_OK)
+                setResult(RESULT_OK)
                 finish()
             }
 
@@ -189,10 +188,10 @@ class RssSourceEditActivity :
                 setEditEntities(tab?.position)
             }
         })
-        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, windowInsets ->
+        binding.recyclerView.setOnApplyWindowInsetsListenerCompat { view, windowInsets ->
             val navigationBarHeight = windowInsets.navigationBarHeight
             val imeHeight = windowInsets.imeHeight
-            binding.recyclerView.bottomPadding = if (imeHeight == 0) navigationBarHeight else 0
+            view.bottomPadding = if (imeHeight == 0) navigationBarHeight else 0
             softKeyboardTool.initialPadding = imeHeight
             windowInsets
         }
@@ -224,7 +223,7 @@ class RssSourceEditActivity :
             add(EditEntity("sortUrl", rs.sortUrl, R.string.sort_url))
             add(EditEntity("loginUrl", rs.loginUrl, R.string.login_url))
             add(EditEntity("loginUi", rs.loginUi, R.string.login_ui))
-            add(EditEntity("loginCheckJs", rs.loginCheckJs, R.string.login_check_js))
+//            add(EditEntity("loginCheckJs", rs.loginCheckJs, R.string.login_check_js))
             add(EditEntity("coverDecodeJs", rs.coverDecodeJs, R.string.cover_decode_js))
             add(EditEntity("header", rs.header, R.string.source_http_header))
             add(EditEntity("variableComment", rs.variableComment, R.string.variable_comment))
@@ -282,6 +281,7 @@ class RssSourceEditActivity :
         source.singleUrl = binding.cbSingleUrl.isChecked
         source.enabledCookieJar = binding.cbIsEnableCookie.isChecked
         sourceEntities.forEach {
+            it.value = it.value?.takeIf { s -> s.isNotBlank() }
             when (it.key) {
                 "sourceName" -> source.sourceName = it.value ?: ""
                 "sourceUrl" -> source.sourceUrl = it.value ?: ""
@@ -300,6 +300,7 @@ class RssSourceEditActivity :
             }
         }
         listEntities.forEach {
+            it.value = it.value?.takeIf { s -> s.isNotBlank() }
             when (it.key) {
                 "ruleArticles" -> source.ruleArticles = it.value
                 "ruleNextPage" -> source.ruleNextPage =
@@ -322,6 +323,7 @@ class RssSourceEditActivity :
             }
         }
         webViewEntities.forEach {
+            it.value = it.value?.takeIf { s -> s.isNotBlank() }
             when (it.key) {
                 "enableJs" -> source.enableJs = it.value.isTrue()
                 "loadWithBaseUrl" -> source.loadWithBaseUrl = it.value.isTrue()
@@ -394,6 +396,8 @@ class RssSourceEditActivity :
             val edit = view.editableText//获取EditText的文字
             if (start < 0 || start >= edit.length) {
                 edit.append(text)
+            } else if (start > end) {
+                edit.replace(end, start, text)
             } else {
                 edit.replace(start, end, text)//光标所在位置插入文字
             }

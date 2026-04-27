@@ -1,8 +1,6 @@
 package io.legado.app.ui.book.audio
 
 import android.annotation.SuppressLint
-import android.app.Activity
-import android.icu.text.SimpleDateFormat
 import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
@@ -31,7 +29,6 @@ import io.legado.app.model.BookCover
 import io.legado.app.service.AudioPlayService
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.book.changesource.ChangeBookSourceDialog
-import io.legado.app.ui.book.read.ReadBookActivity
 import io.legado.app.ui.book.source.edit.BookSourceEditActivity
 import io.legado.app.ui.book.toc.TocActivityResult
 import io.legado.app.ui.login.SourceLoginActivity
@@ -45,6 +42,8 @@ import io.legado.app.utils.observeEventSticky
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.startActivity
+import io.legado.app.utils.startActivityForBook
+import io.legado.app.utils.toDurationTime
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import io.legado.app.utils.visible
 import kotlinx.coroutines.Dispatchers.IO
@@ -66,14 +65,8 @@ class AudioPlayActivity :
     override val viewModel by viewModels<AudioPlayViewModel>()
     private val timerSliderPopup by lazy { TimerSliderPopup(this) }
     private var adjustProgress = false
+    private var playMode = AudioPlay.PlayMode.LIST_END_STOP
 
-    private val progressTimeFormat by lazy {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            SimpleDateFormat("mm:ss", Locale.getDefault())
-        } else {
-            java.text.SimpleDateFormat("mm:ss", Locale.getDefault())
-        }
-    }
     private val tocActivityResult = registerForActivityResult(TocActivityResult()) {
         it?.let {
             if (it.first != AudioPlay.book?.durChapterIndex
@@ -141,6 +134,15 @@ class AudioPlayActivity :
     }
 
     private fun initView() {
+        binding.ivPlayMode.setOnClickListener {
+            AudioPlay.changePlayMode()
+        }
+
+        observeEventSticky<AudioPlay.PlayMode>(EventBus.PLAY_MODE_CHANGED) {
+            playMode = it
+            updatePlayModeIcon()
+        }
+
         binding.fabPlayStop.setOnClickListener {
             playButton()
         }
@@ -155,7 +157,7 @@ class AudioPlayActivity :
         }
         binding.playerProgress.setOnSeekBarChangeListener(object : SeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
-                binding.tvDurTime.text = progressTimeFormat.format(progress.toLong())
+                binding.tvDurTime.text = progress.toDurationTime()
             }
 
             override fun onStartTrackingTouch(seekBar: SeekBar) {
@@ -188,11 +190,15 @@ class AudioPlayActivity :
         binding.llPlayMenu.applyNavigationBarPadding()
     }
 
+    private fun updatePlayModeIcon() {
+        binding.ivPlayMode.setImageResource(playMode.iconRes)
+    }
+
     private fun upCover(path: String?) {
-        BookCover.load(this, path, sourceOrigin = AudioPlay.bookSource?.bookSourceUrl)
-            .into(binding.ivCover)
-        BookCover.loadBlur(this, path)
-            .into(binding.ivBg)
+        BookCover.load(this, path, sourceOrigin = AudioPlay.bookSource?.bookSourceUrl) {
+            BookCover.loadBlur(this, path, sourceOrigin = AudioPlay.bookSource?.bookSourceUrl)
+                .into(binding.ivBg)
+        }.into(binding.ivCover)
     }
 
     private fun playButton() {
@@ -218,9 +224,7 @@ class AudioPlayActivity :
                     AudioPlay.book?.delete()
                     appDb.bookDao.insert(book)
                 }
-                startActivity<ReadBookActivity> {
-                    putExtra("bookUrl", book.bookUrl)
-                }
+                startActivityForBook(book)
                 finish()
             }
         }
@@ -242,7 +246,7 @@ class AudioPlayActivity :
                     AudioPlay.book?.removeType(BookType.notShelf)
                     AudioPlay.book?.save()
                     AudioPlay.inBookshelf = true
-                    setResult(Activity.RESULT_OK)
+                    setResult(RESULT_OK)
                 }
                 noButton { viewModel.removeFromBookshelf { super.finish() } }
             }
@@ -280,18 +284,18 @@ class AudioPlayActivity :
         }
         observeEventSticky<Int>(EventBus.AUDIO_SIZE) {
             binding.playerProgress.max = it
-            binding.tvAllTime.text = progressTimeFormat.format(it.toLong())
+            binding.tvAllTime.text = it.toDurationTime()
         }
         observeEventSticky<Int>(EventBus.AUDIO_PROGRESS) {
             if (!adjustProgress) binding.playerProgress.progress = it
-            binding.tvDurTime.text = progressTimeFormat.format(it.toLong())
+            binding.tvDurTime.text = it.toDurationTime()
         }
         observeEventSticky<Int>(EventBus.AUDIO_BUFFER_PROGRESS) {
             binding.playerProgress.secondaryProgress = it
 
         }
         observeEventSticky<Float>(EventBus.AUDIO_SPEED) {
-            binding.tvSpeed.text = String.format("%.1fX", it)
+            binding.tvSpeed.text = String.format(Locale.ROOT, "%.1fX", it)
             binding.tvSpeed.visible()
         }
         observeEventSticky<Int>(EventBus.AUDIO_DS) {

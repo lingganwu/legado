@@ -18,11 +18,8 @@ import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.RequestBody
 import okhttp3.Response
-import okhttp3.internal.notifyAll
-import okhttp3.internal.wait
 import okio.Buffer
 import okio.BufferedSink
-import okio.ByteString.Companion.encode
 import okio.Pipe
 import okio.Timeout
 import okio.buffer
@@ -187,7 +184,7 @@ class ObsoleteUrlFactory(private var client: OkHttpClient) : URLStreamHandlerFac
             return try {
                 val response = getResponse(true)
                 if (hasBody(response) && response.code >= HTTP_BAD_REQUEST) {
-                    response.body!!.byteStream()
+                    response.body.byteStream()
                 } else null
             } catch (e: IOException) {
                 null
@@ -211,9 +208,8 @@ class ObsoleteUrlFactory(private var client: OkHttpClient) : URLStreamHandlerFac
         override fun getHeaderField(position: Int): String? {
             return try {
                 val headers = headers
-                if (position < 0 || position >= headers.size) null else headers.value(
-                    position
-                ).encode().string(Charsets.ISO_8859_1)
+                if (position < 0 || position >= headers.size) null
+                else headers.value(position)
             } catch (e: IOException) {
                 null
             }
@@ -260,7 +256,7 @@ class ObsoleteUrlFactory(private var client: OkHttpClient) : URLStreamHandlerFac
             }
             val response = getResponse(false)
             if (response.code >= HTTP_BAD_REQUEST) throw FileNotFoundException(url.toString())
-            return response.body!!.byteStream()
+            return response.body.byteStream()
         }
 
         @Throws(IOException::class)
@@ -1120,7 +1116,9 @@ class ObsoleteUrlFactory(private var client: OkHttpClient) : URLStreamHandlerFac
                 var j = i + Character.charCount(c)
                 while (j < length) {
                     c = s.codePointAt(j)
-                    buffer.writeUtf8CodePoint((if (c > '\u001f'.code && c < '\u007f'.code) c else '?') as Int)
+                    buffer.writeUtf8CodePoint(
+                        (if (c > '\u001f'.code && c < '\u007f'.code) c else '?') as Int
+                    )
                     j += Character.charCount(c)
                 }
                 return buffer.readUtf8()
@@ -1173,6 +1171,15 @@ class ObsoleteUrlFactory(private var client: OkHttpClient) : URLStreamHandlerFac
             if (throwable is RuntimeException) throw throwable
             throw AssertionError()
         }
+
+        @Suppress("PLATFORM_CLASS_MAPPED_TO_KOTLIN", "NOTHING_TO_INLINE")
+        private inline fun Any.wait() = (this as Object).wait()
+
+        @Suppress("PLATFORM_CLASS_MAPPED_TO_KOTLIN", "NOTHING_TO_INLINE")
+        private inline fun Any.notify() = (this as Object).notify()
+
+        @Suppress("PLATFORM_CLASS_MAPPED_TO_KOTLIN", "NOTHING_TO_INLINE")
+        private inline fun Any.notifyAll() = (this as Object).notifyAll()
 
         @Throws(Exception::class)
         @JvmStatic

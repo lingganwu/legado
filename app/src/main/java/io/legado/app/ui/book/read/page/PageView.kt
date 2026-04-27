@@ -2,15 +2,20 @@ package io.legado.app.ui.book.read.page
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.drawable.LayerDrawable
 import android.view.LayoutInflater
 import android.widget.FrameLayout
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.toDrawable
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isGone
 import androidx.core.view.isInvisible
 import io.legado.app.R
 import io.legado.app.constant.AppConst.timeFormat
 import io.legado.app.data.entities.Bookmark
 import io.legado.app.databinding.ViewBookPageBinding
+import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ReadTipConfig
 import io.legado.app.model.ReadBook
@@ -21,9 +26,11 @@ import io.legado.app.ui.book.read.page.entities.TextPos
 import io.legado.app.ui.book.read.page.provider.ChapterProvider
 import io.legado.app.ui.widget.BatteryView
 import io.legado.app.utils.activity
+import io.legado.app.utils.applyNavigationBarPadding
 import io.legado.app.utils.applyStatusBarPadding
 import io.legado.app.utils.dpToPx
 import io.legado.app.utils.gone
+import io.legado.app.utils.setOnApplyWindowInsetsListenerCompat
 import io.legado.app.utils.setTextIfNotEqual
 import splitties.views.backgroundColor
 import java.util.Date
@@ -54,13 +61,14 @@ class PageView(context: Context) : FrameLayout(context) {
         get() {
             val h1 = if (binding.vwStatusBar.isGone) 0 else binding.vwStatusBar.height
             val h2 = if (binding.llHeader.isGone) 0 else binding.llHeader.height
-            return h1 + h2
+            return h1 + h2 + binding.vwRoot.paddingTop
         }
 
     init {
         if (!isInEditMode) {
             upStyle()
             binding.vwStatusBar.applyStatusBarPadding()
+            binding.vwNavigationBar.applyNavigationBarPadding()
         }
     }
 
@@ -92,6 +100,8 @@ class PageView(context: Context) : FrameLayout(context) {
             vwTopDivider.backgroundColor = tipDividerColor
             vwBottomDivider.backgroundColor = tipDividerColor
             upStatusBar()
+            upNavigationBar()
+            upPaddingDisplayCutouts()
             llHeader.setPadding(
                 it.headerPaddingLeft.dpToPx(),
                 it.headerPaddingTop.dpToPx(),
@@ -117,6 +127,28 @@ class PageView(context: Context) : FrameLayout(context) {
     fun upStatusBar() = with(binding.vwStatusBar) {
 //        setPadding(paddingLeft, context.statusBarHeight, paddingRight, paddingBottom)
         isGone = ReadBookConfig.hideStatusBar || readBookActivity?.isInMultiWindow == true
+    }
+
+    fun upNavigationBar() {
+        binding.vwNavigationBar.isGone = ReadBookConfig.hideNavigationBar
+    }
+
+    fun upPaddingDisplayCutouts() {
+        if (AppConfig.paddingDisplayCutouts) {
+            binding.vwRoot.setOnApplyWindowInsetsListenerCompat { _, windowInsets ->
+                val insets = windowInsets.getInsets(WindowInsetsCompat.Type.displayCutout())
+                binding.vwRoot.setPadding(
+                    insets.left,
+                    if (binding.vwStatusBar.isGone) insets.top else 0,
+                    insets.right,
+                    insets.bottom
+                )
+                windowInsets
+            }
+        } else {
+            ViewCompat.setOnApplyWindowInsetsListener(binding.vwRoot, null)
+            binding.vwRoot.setPadding(0, 0, 0, 0)
+        }
     }
 
     /**
@@ -233,8 +265,12 @@ class PageView(context: Context) : FrameLayout(context) {
      * 更新背景
      */
     fun upBg() {
-        binding.vwRoot.backgroundColor = ReadBookConfig.bgMeanColor
-        binding.vwBg.background = ReadBookConfig.bg
+        binding.vwRoot.background = LayerDrawable(
+            arrayOf(
+                ReadBookConfig.bgMeanColor.toDrawable(),
+                ReadBookConfig.bg
+            )
+        )
         upBgAlpha()
     }
 
@@ -242,7 +278,8 @@ class PageView(context: Context) : FrameLayout(context) {
      * 更新背景透明度
      */
     fun upBgAlpha() {
-        binding.vwBg.alpha = ReadBookConfig.bgAlpha / 100f
+        ReadBookConfig.bg?.alpha = (ReadBookConfig.bgAlpha / 100f * 255).toInt()
+        binding.vwRoot.invalidate()
     }
 
     /**
@@ -389,8 +426,8 @@ class PageView(context: Context) : FrameLayout(context) {
         return binding.contentTextView.getCurVisiblePage()
     }
 
-    fun getCurVisibleFirstLine(): TextLine? {
-        return binding.contentTextView.getCurVisibleFirstLine()
+    fun getReadAloudPos(): Pair<Int, TextLine>? {
+        return binding.contentTextView.getReadAloudPos()
     }
 
     fun markAsMainView() {

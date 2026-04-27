@@ -5,7 +5,6 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
-import android.view.MotionEvent
 import android.widget.EditText
 import androidx.activity.viewModels
 import androidx.appcompat.widget.SearchView
@@ -30,18 +29,14 @@ import io.legado.app.ui.widget.recycler.VerticalDivider
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.applyNavigationBarMargin
 import io.legado.app.utils.applyTint
-import io.legado.app.utils.hideSoftInput
 import io.legado.app.utils.invisible
 import io.legado.app.utils.observeEvent
 import io.legado.app.utils.postEvent
-import io.legado.app.utils.shouldHideSoftInput
 import io.legado.app.utils.showSoftInput
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import io.legado.app.utils.visible
-import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -60,7 +55,7 @@ class SearchContentActivity :
     }
     private var durChapterIndex = 0
     private var searchJob: Job? = null
-    private var initJob: Deferred<*>? = null
+    private var initJob: Job? = null
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         val bbg = bottomBackground
@@ -101,18 +96,6 @@ class SearchContentActivity :
             }
         }
         return super.onCompatOptionsItemSelected(item)
-    }
-
-    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-        if (ev.action == MotionEvent.ACTION_DOWN) {
-            currentFocus?.let {
-                if (it.shouldHideSoftInput(ev)) {
-                    it.clearFocus()
-                    it.hideSoftInput()
-                }
-            }
-        }
-        return super.dispatchTouchEvent(ev)
     }
 
     private fun initSearchResultList(list: List<SearchResult>?, position: Int) {
@@ -183,7 +166,7 @@ class SearchContentActivity :
     }
 
     private fun initCacheFileNames(book: Book) {
-        initJob = lifecycleScope.async {
+        initJob = lifecycleScope.launch {
             withContext(IO) {
                 viewModel.cacheChapterNames.addAll(BookHelp.getChapterFiles(book))
             }
@@ -214,7 +197,7 @@ class SearchContentActivity :
         binding.refreshProgressBar.isAutoLoading = true
         binding.fbStop.visible()
         searchJob = lifecycleScope.launch(IO) {
-            initJob?.await()
+            initJob?.join()
             kotlin.runCatching {
                 appDb.bookChapterDao.getChapterList(viewModel.bookUrl).forEach { bookChapter ->
                     ensureActive()

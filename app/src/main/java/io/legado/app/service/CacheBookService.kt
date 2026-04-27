@@ -51,6 +51,7 @@ class CacheBookService : BaseService() {
         val builder = NotificationCompat.Builder(this, AppConst.channelIdDownload)
             .setSmallIcon(R.drawable.ic_download)
             .setOngoing(true)
+            .setOnlyAlertOnce(true)
             .setContentTitle(getString(R.string.offline_cache))
             .setContentIntent(activityPendingIntent<CacheActivity>("cacheActivity"))
         builder.addAction(
@@ -64,7 +65,6 @@ class CacheBookService : BaseService() {
     override fun onCreate() {
         super.onCreate()
         isRun = true
-        CacheBook.clear()
         lifecycleScope.launch {
             while (isActive) {
                 delay(1000)
@@ -106,12 +106,14 @@ class CacheBookService : BaseService() {
             val chapterCount = appDb.bookChapterDao.getChapterCount(bookUrl)
             val book = cacheBook.book
             if (chapterCount == 0) {
+                cacheBook.setLoading()
                 mutex.withLock {
                     val name = book.name
                     if (book.tocUrl.isEmpty()) {
                         kotlin.runCatching {
                             WebBook.getBookInfoAwait(cacheBook.bookSource, book)
                         }.onFailure {
+                            removeDownload(bookUrl)
                             val msg = "《$name》目录为空且加载详情页失败\n${it.localizedMessage}"
                             AppLog.put(msg, it, true)
                             return@execute
@@ -122,6 +124,7 @@ class CacheBookService : BaseService() {
                             book.totalChapterNum = 0
                             book.update()
                         }
+                        removeDownload(bookUrl)
                         val msg = "《$name》目录为空且加载目录失败\n${it.localizedMessage}"
                         AppLog.put(msg, it, true)
                         return@execute
@@ -139,10 +142,9 @@ class CacheBookService : BaseService() {
             cacheBook.addDownload(start, end2)
             notificationContent = CacheBook.downloadSummary
             upCacheBookNotification()
-            synchronized(this) {
-                if (downloadJob == null) {
-                    download()
-                }
+        }.onFinally {
+            if (downloadJob == null) {
+                download()
             }
         }
     }
@@ -162,22 +164,8 @@ class CacheBookService : BaseService() {
     private fun download() {
         downloadJob?.cancel()
         downloadJob = lifecycleScope.launch(cachePool) {
-            while (isActive) {
-                if (!CacheBook.isRun) {
-                    CacheBook.stop(this@CacheBookService)
-                    return@launch
-                }
-                CacheBook.cacheBookMap.forEach {
-                    val cacheBookModel = it.value
-                    while (cacheBookModel.waitCount > 0) {
-                        if (CacheBook.onDownloadCount < threadCount) {
-                            cacheBookModel.download(this, cachePool)
-                        } else {
-                            delay(100)
-                        }
-                    }
-                }
-            }
+            CacheBook.startProcessJob(cachePool)
+            stopSelf()
         }
     }
 

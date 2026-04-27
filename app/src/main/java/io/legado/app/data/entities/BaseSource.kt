@@ -9,17 +9,17 @@ import io.legado.app.constant.AppLog
 import io.legado.app.data.entities.rule.RowUi
 import io.legado.app.help.CacheManager
 import io.legado.app.help.JsExtensions
-import io.legado.app.help.SymmetricCryptoAndroid
 import io.legado.app.help.config.AppConfig
+import io.legado.app.help.crypto.SymmetricCryptoAndroid
 import io.legado.app.help.http.CookieStore
-import io.legado.app.model.SharedJsScope
+import io.legado.app.help.source.getShareScope
 import io.legado.app.utils.GSON
+import io.legado.app.utils.GSONStrict
 import io.legado.app.utils.fromJsonArray
 import io.legado.app.utils.fromJsonObject
 import io.legado.app.utils.has
 import io.legado.app.utils.printOnDebug
 import org.intellij.lang.annotations.Language
-import org.mozilla.javascript.Scriptable
 
 /**
  * 可在js里调用,source.xxx()
@@ -103,16 +103,23 @@ interface BaseSource : JsExtensions {
      */
     fun getHeaderMap(hasLoginHeader: Boolean = false) = HashMap<String, String>().apply {
         header?.let {
-            val json = when {
-                it.startsWith("@js:", true) -> evalJS(it.substring(4)).toString()
-                it.startsWith("<js>", true) -> evalJS(
-                    it.substring(4, it.lastIndexOf("<"))
-                ).toString()
+            try {
+                val json = when {
+                    it.startsWith("@js:", true) -> evalJS(it.substring(4)).toString()
+                    it.startsWith("<js>", true) -> evalJS(
+                        it.substring(4, it.lastIndexOf("<"))
+                    ).toString()
 
-                else -> it
-            }
-            GSON.fromJsonObject<Map<String, String>>(json).getOrNull()?.let { map ->
-                putAll(map)
+                    else -> it
+                }
+                GSONStrict.fromJsonObject<Map<String, String>>(json).getOrNull()?.let { map ->
+                    putAll(map)
+                } ?: GSON.fromJsonObject<Map<String, String>>(json).getOrNull()?.let { map ->
+                    log("请求头规则 JSON 格式不规范，请改为规范格式")
+                    putAll(map)
+                }
+            } catch (e: Exception) {
+                AppLog.put("执行请求头规则出错\n$e", e)
             }
         }
         if (!has(AppConst.UA_NAME, true)) {
@@ -232,21 +239,21 @@ interface BaseSource : JsExtensions {
     @Throws(Exception::class)
     fun evalJS(jsStr: String, bindingsConfig: ScriptBindings.() -> Unit = {}): Any? {
         val bindings = buildScriptBindings { bindings ->
-            bindings.apply(bindingsConfig)
             bindings["java"] = this
             bindings["source"] = this
             bindings["baseUrl"] = getKey()
             bindings["cookie"] = CookieStore
             bindings["cache"] = CacheManager
+            bindings.apply(bindingsConfig)
         }
-        val scope = RhinoScriptEngine.getRuntimeScope(bindings)
-        getShareScope()?.let {
-            scope.prototype = it
+        val sharedScope = getShareScope()
+        val scope = if (sharedScope == null) {
+            RhinoScriptEngine.getRuntimeScope(bindings)
+        } else {
+            bindings.apply {
+                prototype = sharedScope
+            }
         }
         return RhinoScriptEngine.eval(jsStr, scope)
-    }
-
-    fun getShareScope(): Scriptable? {
-        return SharedJsScope.getScope(jsLib)
     }
 }

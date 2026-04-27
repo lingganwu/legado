@@ -17,6 +17,7 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
+import io.legado.app.service.BaseReadAloudService
 import io.legado.app.ui.book.read.ContentEditDialog
 import io.legado.app.ui.book.read.page.api.DataSource
 import io.legado.app.ui.book.read.page.delegate.CoverPageDelegate
@@ -28,13 +29,14 @@ import io.legado.app.ui.book.read.page.delegate.SimulationPageDelegate
 import io.legado.app.ui.book.read.page.delegate.SlidePageDelegate
 import io.legado.app.ui.book.read.page.entities.PageDirection
 import io.legado.app.ui.book.read.page.entities.TextChapter
+import io.legado.app.ui.book.read.page.entities.TextLine
 import io.legado.app.ui.book.read.page.entities.TextPage
 import io.legado.app.ui.book.read.page.entities.TextPos
+import io.legado.app.ui.book.read.page.entities.column.TextColumn
 import io.legado.app.ui.book.read.page.provider.ChapterProvider
 import io.legado.app.ui.book.read.page.provider.LayoutProgressListener
 import io.legado.app.ui.book.read.page.provider.TextPageFactory
 import io.legado.app.utils.activity
-import io.legado.app.utils.canvasrecorder.pools.BitmapPool
 import io.legado.app.utils.invisible
 import io.legado.app.utils.longToastOnUi
 import io.legado.app.utils.showDialogFragment
@@ -305,6 +307,8 @@ class ReadView(context: Context, attrs: AttributeSet) :
             invalidate()
         }
         pageDelegate?.onScroll()
+        val offset = touchY - lastY
+        touchY -= offset - offset.toInt()
     }
 
     /**
@@ -357,7 +361,7 @@ class ReadView(context: Context, attrs: AttributeSet) :
                     var ci = 0
                     for (index in lineStart..lineEnd) {
                         val textLine = page.getLine(index)
-                        for (j in 0 until textLine.charSize) {
+                        for (j in textLine.columns.indices) {
                             if (ci == start) {
                                 startPos.lineIndex = index
                                 startPos.columnIndex = j
@@ -366,7 +370,12 @@ class ReadView(context: Context, attrs: AttributeSet) :
                                 endPos.columnIndex = j
                                 return@run
                             }
-                            ci++
+                            val column = textLine.getColumn(j)
+                            if (column is TextColumn) {
+                                ci += column.charData.length
+                            } else {
+                                ci++
+                            }
                         }
                     }
                 }
@@ -445,6 +454,14 @@ class ReadView(context: Context, attrs: AttributeSet) :
                 { progress -> callBack.sureNewProgress(progress) },
                 { context.longToastOnUi(context.getString(R.string.upload_book_success)) },
                 { context.longToastOnUi(context.getString(R.string.sync_book_progress_success)) })
+
+            13 -> {
+                if (BaseReadAloudService.isPlay()) {
+                    ReadAloud.pause(context)
+                } else {
+                    ReadAloud.resume(context)
+                }
+            }
         }
     }
 
@@ -479,7 +496,6 @@ class ReadView(context: Context, attrs: AttributeSet) :
         pageDelegate?.onDestroy()
         curPage.cancelSelect()
         invalidateTextPage()
-        BitmapPool.clear()
     }
 
     /**
@@ -659,8 +675,8 @@ class ReadView(context: Context, attrs: AttributeSet) :
         return curPage.getCurVisiblePage()
     }
 
-    fun getCurPagePosition(): Int {
-        return curPage.getCurVisibleFirstLine()?.pagePosition ?: 0
+    fun getReadAloudPos(): Pair<Int, TextLine>? {
+        return curPage.getReadAloudPos()
     }
 
     fun invalidateTextPage() {

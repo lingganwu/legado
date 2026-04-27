@@ -26,6 +26,7 @@ import kotlinx.coroutines.withContext
 import splitties.init.appCtx
 import java.io.File
 import java.io.FileOutputStream
+import kotlin.math.min
 
 object ImageProvider {
 
@@ -40,26 +41,38 @@ object ImageProvider {
     private const val M = 1024 * 1024
     val cacheSize: Int
         get() {
-            if (AppConfig.bitmapCacheSize <= 0 || AppConfig.bitmapCacheSize >= 2048) {
+            if (AppConfig.bitmapCacheSize !in 1..1024) {
                 AppConfig.bitmapCacheSize = 50
             }
             return AppConfig.bitmapCacheSize * M
         }
-    val bitmapLruCache = object : LruCache<String, Bitmap>(cacheSize) {
 
-        override fun sizeOf(filePath: String, bitmap: Bitmap): Int {
-            return bitmap.byteCount
+    val bitmapLruCache = BitmapLruCache()
+
+    class BitmapLruCache : LruCache<String, Bitmap>(cacheSize) {
+
+        private var removeCount = 0
+
+        val count get() = putCount() + createCount() - evictionCount() - removeCount
+
+        override fun sizeOf(key: String, value: Bitmap): Int {
+            return value.byteCount
         }
 
         override fun entryRemoved(
             evicted: Boolean,
-            filePath: String,
-            oldBitmap: Bitmap,
-            newBitmap: Bitmap?
+            key: String,
+            oldValue: Bitmap,
+            newValue: Bitmap?
         ) {
+            if (!evicted) {
+                synchronized(this) {
+                    removeCount++
+                }
+            }
             //错误图片不能释放,占位用,防止一直重复获取图片
-            if (oldBitmap != errorBitmap) {
-                oldBitmap.recycle()
+            if (oldValue != errorBitmap) {
+                oldValue.recycle()
                 //putDebug("ImageProvider: trigger bitmap recycle. URI: $filePath")
                 //putDebug("ImageProvider : cacheUsage ${size()}bytes / ${maxSize()}bytes")
             }
@@ -68,20 +81,41 @@ object ImageProvider {
     }
 
     fun put(key: String, bitmap: Bitmap) {
+        ensureLruCacheSize(bitmap)
         bitmapLruCache.put(key, bitmap)
     }
 
     fun get(key: String): Bitmap? {
-        return bitmapLruCache.get(key)
+        return bitmapLruCache[key]
+    }
+
+    fun remove(key: String): Bitmap? {
+        return bitmapLruCache.remove(key)
     }
 
     private fun getNotRecycled(key: String): Bitmap? {
-        val bitmap = bitmapLruCache.get(key) ?: return null
+        val bitmap = bitmapLruCache[key] ?: return null
         if (bitmap.isRecycled) {
             bitmapLruCache.remove(key)
             return null
         }
         return bitmap
+    }
+
+    private fun ensureLruCacheSize(bitmap: Bitmap) {
+        val lruMaxSize = bitmapLruCache.maxSize()
+        val lruSize = bitmapLruCache.size()
+        val byteCount = bitmap.byteCount
+        val size = if (byteCount > lruMaxSize) {
+            min(256 * M, (byteCount * 1.3).toInt())
+        } else if (lruSize + byteCount > lruMaxSize && bitmapLruCache.count < 5) {
+            min(256 * M, (lruSize + byteCount * 1.3).toInt())
+        } else {
+            lruMaxSize
+        }
+        if (size > lruMaxSize) {
+            bitmapLruCache.resize(size)
+        }
     }
 
     /**
@@ -163,11 +197,11 @@ object ImageProvider {
             val bitmap = BitmapUtils.decodeBitmap(vFile.absolutePath, width, height)
                 ?: SvgUtils.createBitmap(vFile.absolutePath, width, height)
                 ?: throw NoStackTraceException(appCtx.getString(R.string.error_decode_bitmap))
-            bitmapLruCache.put(vFile.absolutePath, bitmap)
+            put(vFile.absolutePath, bitmap)
             bitmap
         }.onFailure {
             //错误图片占位,防止重复获取
-            bitmapLruCache.put(vFile.absolutePath, errorBitmap)
+            put(vFile.absolutePath, errorBitmap)
         }.getOrDefault(errorBitmap)
     }
 

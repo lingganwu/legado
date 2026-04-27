@@ -38,6 +38,7 @@ interface RssSourceDao {
         where sourceName like '%' || :key || '%' 
         or sourceUrl like '%' || :key || '%' 
         or sourceGroup like '%' || :key || '%'
+        or sourceComment like '%' || :key || '%'
         order by customOrder"""
     )
     fun flowSearch(key: String): Flow<List<RssSource>>
@@ -69,7 +70,8 @@ interface RssSourceDao {
         where enabled = 1 
         and (sourceName like '%' || :searchKey || '%' 
             or sourceGroup like '%' || :searchKey || '%' 
-            or sourceUrl like '%' || :searchKey || '%') 
+            or sourceUrl like '%' || :searchKey || '%'
+            or sourceComment like '%' || :searchKey || '%') 
         order by customOrder"""
     )
     fun flowEnabled(searchKey: String): Flow<List<RssSource>>
@@ -120,8 +122,11 @@ interface RssSourceDao {
     @Query("select * from rssSources where sourceGroup like '%' || :group || '%'")
     fun getByGroup(group: String): List<RssSource>
 
-    @Query("select 1 from rssSources where sourceUrl = :key")
-    fun has(key: String): Boolean?
+    @Query("select exists(select 1 from rssSources where sourceUrl = :key)")
+    fun has(key: String): Boolean
+
+    @Query("update rssSources set enabled = :enable where sourceUrl = :sourceUrl")
+    fun enable(sourceUrl: String, enable: Boolean)
 
     private fun dealGroups(list: List<String>): List<String> {
         val groups = linkedSetOf<String>()

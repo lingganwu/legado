@@ -26,12 +26,13 @@ import io.legado.app.help.book.isNotShelf
 import io.legado.app.help.book.isSameNameAuthor
 import io.legado.app.help.book.isWebFile
 import io.legado.app.help.book.removeType
-import io.legado.app.help.book.simulatedTotalChapterNum
+import io.legado.app.help.book.updateTo
 import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.lib.webdav.ObjectNotFoundException
 import io.legado.app.model.AudioPlay
 import io.legado.app.model.BookCover
 import io.legado.app.model.ReadBook
+import io.legado.app.model.ReadManga
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.model.localBook.LocalBook
 import io.legado.app.model.webBook.WebBook
@@ -64,6 +65,11 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
                 return@execute
             }
             if (bookUrl.isNotBlank()) {
+                appDb.bookDao.getBook(bookUrl)?.let {
+                    inBookshelf = !it.isNotShelf
+                    upBook(it)
+                    return@execute
+                }
                 appDb.searchBookDao.getSearchBook(bookUrl)?.toBook()?.let {
                     upBook(it)
                     return@execute
@@ -97,7 +103,7 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
             bookSource = if (book.isLocal) null else
                 appDb.bookSourceDao.getBookSource(book.origin)
             if (book.tocUrl.isEmpty() && !book.isLocal) {
-                loadBookInfo(book)
+                loadBookInfo(book, runPreUpdateJs = inBookshelf)
             } else {
                 val chapterList = appDb.bookChapterDao.getChapterList(book.bookUrl)
                 if (chapterList.isNotEmpty()) {
@@ -165,12 +171,13 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
     fun loadBookInfo(
         book: Book,
         canReName: Boolean = true,
+        runPreUpdateJs: Boolean = true,
         scope: CoroutineScope = viewModelScope
     ) {
         if (book.isLocal) {
             LocalBook.upBookInfo(book)
             bookData.postValue(book)
-            loadChapter(book, scope)
+            loadChapter(book)
         } else {
             val bookSource = bookSource ?: let {
                 chapterListData.postValue(emptyList())
@@ -180,10 +187,10 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
             WebBook.getBookInfo(scope, bookSource, book, canReName = canReName)
                 .onSuccess(IO) {
                     val dbBook = appDb.bookDao.getBook(book.name, book.author)
-                    if (dbBook != null && !dbBook.isNotShelf && dbBook.origin == book.origin) {
+                    if (!inBookshelf && dbBook != null && !dbBook.isNotShelf && dbBook.origin == book.origin) {
                         /**
-                         * book 来自搜索时，搜索的书名不存在于书架，但是加载详情后，书名更新，存在同名书籍
-                         * 此时 book 的数据会与数据库中的不同，需要更新 #3652
+                         * book 来自搜索时(inBookshelf == false)，搜索的书名不存在于书架，但是加载详情后，书名更新，存在同名书籍
+                         * 此时 book 的数据会与数据库中的不同，需要更新 #3652 #4619
                          * book 加载详情后虽然书名作者相同，但是又可能不是数据库中(书源不同)的那本书 #3149
                          */
                         dbBook.updateTo(it)
@@ -191,23 +198,12 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
                     }
                     bookData.postValue(it)
                     if (inBookshelf) {
-                        val dbBook1 = appDb.bookDao.getBook(it.bookUrl)
-                        if (dbBook1 == null) {
-                            /**
-                             * 来自搜索，同一本书，不同 bookUrl
-                             */
-                            appDb.bookDao.insert(it)
-                        } else {
-                            appDb.bookDao.update(it)
-                        }
-                        if (dbBook != null && (dbBook.name != book.name || dbBook.bookUrl != book.bookUrl)) {
-                            BookHelp.updateCacheFolder(dbBook, book)
-                        }
+                        it.save()
                     }
                     if (it.isWebFile) {
-                        loadWebFile(it, scope)
+                        loadWebFile(it)
                     } else {
-                        loadChapter(it, scope)
+                        loadChapter(it, runPreUpdateJs)
                     }
                 }.onError {
                     AppLog.put("获取书籍信息失败\n${it.localizedMessage}", it)
@@ -218,6 +214,7 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
 
     private fun loadChapter(
         book: Book,
+        runPreUpdateJs: Boolean = true,
         scope: CoroutineScope = viewModelScope
     ) {
         if (book.isLocal) {
@@ -226,6 +223,8 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
                     appDb.bookDao.update(book)
                     appDb.bookChapterDao.delByBook(book.bookUrl)
                     appDb.bookChapterDao.insert(*it.toTypedArray())
+                    ReadBook.onChapterListUpdated(book)
+                    bookData.postValue(book)
                     chapterListData.postValue(it)
                 }
             }.onError {
@@ -238,25 +237,19 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
                 return
             }
             val oldBook = book.copy()
-            WebBook.getChapterList(scope, bookSource, book, true)
+            WebBook.getChapterList(scope, bookSource, book, runPreUpdateJs)
                 .onSuccess(IO) {
-                    /**
-                     * runPreUpdateJs 有可能会修改 book 的书名作者和 bookUrl
-                     */
                     if (inBookshelf) {
-                        if (oldBook.bookUrl == book.bookUrl) {
-                            appDb.bookDao.update(book)
-                        } else {
-                            appDb.bookDao.insert(book)
+                        appDb.bookDao.replace(oldBook, book)
+                        /**
+                         * runPreUpdateJs 有可能会修改 book 的 bookUrl
+                         */
+                        if (oldBook.bookUrl != book.bookUrl) {
                             BookHelp.updateCacheFolder(oldBook, book)
                         }
                         appDb.bookChapterDao.delByBook(oldBook.bookUrl)
                         appDb.bookChapterDao.insert(*it.toTypedArray())
-                        if (book.isSameNameAuthor(ReadBook.book)) {
-                            ReadBook.book = book
-                            ReadBook.chapterSize = book.totalChapterNum
-                            ReadBook.simulatedChapterSize = book.simulatedTotalChapterNum()
-                        }
+                        ReadBook.onChapterListUpdated(book)
                     }
                     bookData.postValue(book)
                     chapterListData.postValue(it)
@@ -277,16 +270,16 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
         }
     }
 
-    private fun loadWebFile(
-        book: Book,
-        scope: CoroutineScope = viewModelScope
-    ) {
-        execute(scope) {
+    private fun loadWebFile(book: Book) {
+        execute {
             webFiles.clear()
             val fileNameNoExtension = if (book.author.isBlank()) book.name
             else "${book.name} 作者：${book.author}"
             book.downloadUrls!!.map {
-                val analyzeUrl = AnalyzeUrl(it, source = bookSource)
+                val analyzeUrl = AnalyzeUrl(
+                    it, source = bookSource,
+                    coroutineContext = coroutineContext
+                )
                 val mFileName = UrlUtil.getFileName(analyzeUrl)
                     ?: "${fileNameNoExtension}.${analyzeUrl.type}"
                 WebFile(it, mFileName)
@@ -485,6 +478,9 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
             BookHelp.clearCache(bookData.value!!)
             if (ReadBook.book?.bookUrl == bookData.value!!.bookUrl) {
                 ReadBook.clearTextChapter()
+            }
+            if (ReadManga.book?.bookUrl == bookData.value!!.bookUrl) {
+                ReadManga.clearMangaChapter()
             }
         }.onSuccess {
             context.toastOnUi(R.string.clear_cache_success)

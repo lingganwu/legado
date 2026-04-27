@@ -7,6 +7,7 @@ import io.legado.app.help.CacheManager
 import io.legado.app.help.IntentData
 import io.legado.app.ui.association.VerificationCodeActivity
 import io.legado.app.ui.browser.WebViewActivity
+import io.legado.app.utils.isMainThread
 import io.legado.app.utils.startActivity
 import splitties.init.appCtx
 import java.util.concurrent.locks.LockSupport
@@ -19,13 +20,16 @@ object SourceVerificationHelp {
 
     private val waitTime = 1.minutes.inWholeNanoseconds
 
-    private fun getVerificationResultKey(source: BaseSource) = getVerificationResultKey(source.getKey())
+    private fun getVerificationResultKey(source: BaseSource) =
+        getVerificationResultKey(source.getKey())
+
     private fun getVerificationResultKey(sourceKey: String) = "${sourceKey}_verificationResult"
 
     /**
      * 获取书源验证结果
      * 图片验证码 防爬 滑动验证码 点击字符 等等
      */
+    @Synchronized
     fun getVerificationResult(
         source: BaseSource?,
         url: String,
@@ -35,6 +39,8 @@ object SourceVerificationHelp {
     ): String {
         source
             ?: throw NoStackTraceException("getVerificationResult parameter source cannot be null")
+        require(url.length < 64 * 1024) { "getVerificationResult parameter url too long" }
+        check(!isMainThread) { "getVerificationResult must be called on a background thread" }
 
         clearResult(source.getKey())
 
@@ -43,6 +49,7 @@ object SourceVerificationHelp {
                 putExtra("imageUrl", url)
                 putExtra("sourceOrigin", source.getKey())
                 putExtra("sourceName", source.getTag())
+                putExtra("sourceType", source.getSourceType())
                 IntentData.put(getVerificationResultKey(source), Thread.currentThread())
             }
         } else {
@@ -58,11 +65,13 @@ object SourceVerificationHelp {
             LockSupport.parkNanos(this, waitTime)
         }
 
-        return getResult(source.getKey())!!.let {
-            it.ifBlank {
-                throw NoStackTraceException("验证结果为空")
-            }
+        val result = getResult(source.getKey())!!
+        clearResult(source.getKey())
+        result.ifBlank {
+            throw NoStackTraceException("验证结果为空")
         }
+
+        return result
     }
 
     /**
@@ -77,14 +86,15 @@ object SourceVerificationHelp {
         refetchAfterSuccess: Boolean? = true
     ) {
         source ?: throw NoStackTraceException("startBrowser parameter source cannot be null")
+        require(url.length < 64 * 1024) { "startBrowser parameter url too long" }
         appCtx.startActivity<WebViewActivity> {
             putExtra("title", title)
             putExtra("url", url)
             putExtra("sourceOrigin", source.getKey())
             putExtra("sourceName", source.getTag())
+            putExtra("sourceType", source.getSourceType())
             putExtra("sourceVerificationEnable", saveResult)
             putExtra("refetchAfterSuccess", refetchAfterSuccess)
-            IntentData.put(url, source.getHeaderMap(true))
             IntentData.put(getVerificationResultKey(source), Thread.currentThread())
         }
     }
@@ -101,7 +111,7 @@ object SourceVerificationHelp {
     }
 
     fun getResult(sourceKey: String): String? {
-        return CacheManager.get(getVerificationResultKey(sourceKey))
+        return CacheManager.getFromMemory(getVerificationResultKey(sourceKey)) as? String
     }
 
     fun clearResult(sourceKey: String) {

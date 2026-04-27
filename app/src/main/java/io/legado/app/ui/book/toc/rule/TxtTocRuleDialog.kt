@@ -33,13 +33,12 @@ import io.legado.app.ui.widget.recycler.ItemTouchCallback
 import io.legado.app.ui.widget.recycler.VerticalDivider
 import io.legado.app.utils.ACache
 import io.legado.app.utils.applyTint
+import io.legado.app.utils.isAbsUrl
 import io.legado.app.utils.launch
-import io.legado.app.utils.readText
 import io.legado.app.utils.setLayout
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.showHelp
 import io.legado.app.utils.splitNotBlank
-import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.flow.catch
@@ -71,12 +70,8 @@ class TxtTocRuleDialog() : BaseDialogFragment(R.layout.dialog_toc_regex),
         showDialogFragment(ImportTxtTocRuleDialog(it))
     }
     private val importDoc = registerForActivityResult(HandleFileContract()) {
-        kotlin.runCatching {
-            it.uri?.readText(requireContext())?.let {
-                showDialogFragment(ImportTxtTocRuleDialog(it))
-            }
-        }.onFailure {
-            toastOnUi("readTextError:${it.localizedMessage}")
+        it.uri?.let { uri ->
+            showDialogFragment(ImportTxtTocRuleDialog(uri.toString()))
         }
     }
 
@@ -149,6 +144,7 @@ class TxtTocRuleDialog() : BaseDialogFragment(R.layout.dialog_toc_regex),
                 mode = HandleFileContract.FILE
                 allowExtensions = arrayOf("txt", "json")
             }
+
             R.id.menu_import_onLine -> showImportDialog()
             R.id.menu_import_qr -> qrCodeResult.launch()
             R.id.menu_import_default -> viewModel.importDefault()
@@ -186,7 +182,7 @@ class TxtTocRuleDialog() : BaseDialogFragment(R.layout.dialog_toc_regex),
             okButton {
                 val text = alertBinding.editView.text?.toString()
                 text?.let {
-                    if (!cacheUrls.contains(it)) {
+                    if (it.isAbsUrl() && !cacheUrls.contains(it)) {
                         cacheUrls.add(0, it)
                         aCache.put(importTocRuleKey, cacheUrls.joinToString(","))
                     }
@@ -258,7 +254,7 @@ class TxtTocRuleDialog() : BaseDialogFragment(R.layout.dialog_toc_regex),
                 } else {
                     for (i in payloads.indices) {
                         val bundle = payloads[i] as Bundle
-                        bundle.keySet().map {
+                        bundle.keySet().forEach {
                             when (it) {
                                 "upName" -> rbRegexName.text = item.name
                                 "upExample" -> titleExample.text = item.example
@@ -273,18 +269,16 @@ class TxtTocRuleDialog() : BaseDialogFragment(R.layout.dialog_toc_regex),
 
         override fun registerListener(holder: ItemViewHolder, binding: ItemTocRegexBinding) {
             binding.apply {
-                rbRegexName.setOnCheckedChangeListener { buttonView, isChecked ->
-                    if (buttonView.isPressed && isChecked) {
+                rbRegexName.setOnUserCheckedChangeListener { isChecked ->
+                    if (isChecked) {
                         selectedName = getItem(holder.layoutPosition)?.name
                         updateItems(0, itemCount - 1, bundleOf("upSelect" to null))
                     }
                 }
-                swtEnabled.setOnCheckedChangeListener { buttonView, isChecked ->
-                    if (buttonView.isPressed) {
-                        getItem(holder.layoutPosition)?.let {
-                            it.enable = isChecked
-                            viewModel.update(it)
-                        }
+                swtEnabled.setOnUserCheckedChangeListener { isChecked ->
+                    getItem(holder.layoutPosition)?.let {
+                        it.enable = isChecked
+                        viewModel.update(it)
                     }
                 }
                 ivEdit.setOnClickListener {
@@ -292,7 +286,13 @@ class TxtTocRuleDialog() : BaseDialogFragment(R.layout.dialog_toc_regex),
                 }
                 ivDelete.setOnClickListener {
                     getItem(holder.layoutPosition)?.let { item ->
-                        viewModel.del(item)
+                        alert(R.string.draw) {
+                            setMessage(getString(R.string.sure_del) + "\n" + item.name)
+                            noButton()
+                            yesButton {
+                                viewModel.del(item)
+                            }
+                        }
                     }
                 }
             }

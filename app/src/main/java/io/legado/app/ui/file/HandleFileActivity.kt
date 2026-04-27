@@ -3,24 +3,31 @@ package io.legado.app.ui.file
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.os.Environment
 import android.webkit.MimeTypeMap
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.core.net.toUri
 import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
 import io.legado.app.constant.AppLog
 import io.legado.app.databinding.ActivityTranslucenceBinding
+import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.help.IntentData
 import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.permission.Permissions
 import io.legado.app.lib.permission.PermissionsCompat
+import io.legado.app.utils.SelectImageContract
+import io.legado.app.utils.checkWrite
+import io.legado.app.utils.externalFiles
 import io.legado.app.utils.getJsonArray
 import io.legado.app.utils.isContentScheme
 import io.legado.app.utils.launch
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
+import splitties.init.appCtx
 import java.io.File
 
 class HandleFileActivity :
@@ -54,6 +61,12 @@ class HandleFileActivity :
         } ?: finish()
     }
 
+    private val selectImage = registerForActivityResult(SelectImageContract()) {
+        it.uri?.let { uri ->
+            onResult(Intent().setData(uri))
+        } ?: finish()
+    }
+
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         mode = intent.getIntExtra("mode", 0)
         viewModel.errorLiveData.observe(this) {
@@ -70,6 +83,8 @@ class HandleFileActivity :
             ).apply {
                 addAll(getDirActions())
             }
+
+            HandleFileContract.IMAGE -> getImageActions()
             else -> arrayListOf()
         }
         intent.getJsonArray<SelectItem<Int>>("otherActions")?.let {
@@ -79,6 +94,7 @@ class HandleFileActivity :
             when (mode) {
                 HandleFileContract.EXPORT -> return@let getString(R.string.export)
                 HandleFileContract.DIR -> return@let getString(R.string.select_folder)
+                HandleFileContract.IMAGE -> return@let getString(R.string.select_image)
                 else -> return@let getString(R.string.select_file)
             }
         }
@@ -88,8 +104,7 @@ class HandleFileActivity :
                     HandleFileContract.DIR -> kotlin.runCatching {
                         selectDocTree.launch()
                     }.onFailure {
-                        AppLog.put(getString(R.string.open_sys_dir_picker_error), it)
-                        toastOnUi(R.string.open_sys_dir_picker_error)
+                        AppLog.put(getString(R.string.open_sys_dir_picker_error), it, true)
                         checkPermissions {
                             FilePickerDialog.show(
                                 supportFragmentManager,
@@ -97,11 +112,11 @@ class HandleFileActivity :
                             )
                         }
                     }
+
                     HandleFileContract.FILE -> kotlin.runCatching {
                         selectDoc.launch(typesOfExtensions(allowExtensions))
                     }.onFailure {
-                        AppLog.put(getString(R.string.open_sys_dir_picker_error), it)
-                        toastOnUi(R.string.open_sys_dir_picker_error)
+                        AppLog.put(getString(R.string.open_sys_dir_picker_error), it, true)
                         checkPermissions {
                             FilePickerDialog.show(
                                 supportFragmentManager,
@@ -110,6 +125,11 @@ class HandleFileActivity :
                             )
                         }
                     }
+
+                    HandleFileContract.IMAGE -> {
+                        selectImage.launch()
+                    }
+
                     10 -> checkPermissions {
                         @Suppress("DEPRECATION")
                         lifecycleScope.launchWhenResumed {
@@ -119,6 +139,7 @@ class HandleFileActivity :
                             )
                         }
                     }
+
                     11 -> checkPermissions {
                         @Suppress("DEPRECATION")
                         lifecycleScope.launchWhenResumed {
@@ -129,17 +150,23 @@ class HandleFileActivity :
                             )
                         }
                     }
+
                     111 -> getFileData()?.let {
                         viewModel.upload(it.first, it.second, it.third) { url ->
-                            val uri = Uri.parse(url)
+                            val uri = url.toUri()
                             setResult(RESULT_OK, Intent().setData(uri))
                             finish()
                         }
                     }
+
+                    112 -> checkPermissions { // 手动输入目录路径
+                        showInputDirectoryDialog()
+                    }
+
                     else -> {
                         val path = item.title
                         val uri = if (path.isContentScheme()) {
-                            Uri.parse(path)
+                            path.toUri()
                         } else {
                             Uri.fromFile(File(path))
                         }
@@ -151,6 +178,56 @@ class HandleFileActivity :
                 finish()
             }
         }
+    }
+
+    private fun showInputDirectoryDialog() {
+        val alertBinding = DialogEditTextBinding.inflate(layoutInflater).apply {
+            editView.hint = getString(R.string.enter_directory_path)
+        }
+
+        alert(getString(R.string.manual_input)) {
+            customView { alertBinding.root }
+            okButton {
+                val inputPath = alertBinding.editView.text.toString()
+                if (inputPath.isBlank()) {
+                    toastOnUi(getString(R.string.empty_directory_input))
+                    return@okButton
+                }
+                val file = File(inputPath)
+                if (file.exists() &&
+                    file.isDirectory &&
+                    isExternalStorage(file) &&
+                    file.checkWrite()
+                ) {
+                    onResult(Intent().setData(Uri.fromFile(file)))
+                } else {
+                    toastOnUi(getString(R.string.invalid_directory))
+                }
+            }
+            onDismiss {
+                finish()
+            }
+            cancelButton()
+        }
+    }
+
+    private fun isExternalStorage(path: File): Boolean {
+        if (path.canonicalPath.startsWith(appCtx.externalFiles.parent!!)) {
+            return false
+        }
+        try {
+            if (Environment.isExternalStorageEmulated(path)) {
+                return true
+            }
+        } catch (_: IllegalArgumentException) {
+        }
+        try {
+            if (Environment.isExternalStorageRemovable(path)) {
+                return true
+            }
+        } catch (_: IllegalArgumentException) {
+        }
+        return false
     }
 
     private fun getFileData(): Triple<String, Any, String>? {
@@ -167,11 +244,15 @@ class HandleFileActivity :
 
     private fun getDirActions(onlySys: Boolean = false): ArrayList<SelectItem<Int>> {
         return if (onlySys) {
-            arrayListOf(SelectItem(getString(R.string.sys_folder_picker), HandleFileContract.DIR))
+            arrayListOf(
+                SelectItem(getString(R.string.sys_folder_picker), HandleFileContract.DIR),
+                SelectItem(getString(R.string.manual_input), 112) // 添加手动输入选项
+            )
         } else {
             arrayListOf(
                 SelectItem(getString(R.string.sys_folder_picker), HandleFileContract.DIR),
-                SelectItem(getString(R.string.app_folder_picker), 10)
+                SelectItem(getString(R.string.app_folder_picker), 10),
+                SelectItem(getString(R.string.manual_input), 112) // 添加手动输入选项
             )
         }
     }
@@ -181,6 +262,14 @@ class HandleFileActivity :
             SelectItem(getString(R.string.sys_file_picker), HandleFileContract.FILE),
             SelectItem(getString(R.string.app_file_picker), 11)
         )
+    }
+
+    private fun getImageActions(): ArrayList<SelectItem<Int>> {
+        return arrayListOf(
+            SelectItem(getString(R.string.sys_image_picker), HandleFileContract.IMAGE)
+        ).apply {
+            addAll(getFileActions())
+        }
     }
 
     private fun checkPermissions(success: (() -> Unit)? = null) {
@@ -239,5 +328,4 @@ class HandleFileActivity :
             finish()
         }
     }
-
 }

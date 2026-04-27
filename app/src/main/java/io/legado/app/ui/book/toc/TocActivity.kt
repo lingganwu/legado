@@ -6,7 +6,6 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
-import android.view.MotionEvent
 import androidx.activity.viewModels
 import androidx.appcompat.widget.SearchView
 import androidx.fragment.app.Fragment
@@ -17,7 +16,6 @@ import io.legado.app.base.VMBaseActivity
 import io.legado.app.data.entities.Book
 import io.legado.app.databinding.ActivityChapterListBinding
 import io.legado.app.help.book.isLocalTxt
-import io.legado.app.help.book.simulatedTotalChapterNum
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.lib.theme.primaryTextColor
@@ -28,8 +26,6 @@ import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.widget.dialog.WaitDialog
 import io.legado.app.utils.applyTint
 import io.legado.app.utils.gone
-import io.legado.app.utils.hideSoftInput
-import io.legado.app.utils.shouldHideSoftInput
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import io.legado.app.utils.visible
@@ -69,17 +65,6 @@ class TocActivity : VMBaseActivity<ActivityChapterListBinding, TocViewModel>(),
         intent.getStringExtra("bookUrl")?.let {
             viewModel.initBook(it)
         }
-    }
-
-    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-        if (ev.action == MotionEvent.ACTION_DOWN) {
-            currentFocus?.let {
-                if (it.shouldHideSoftInput(ev)) {
-                    it.hideSoftInput()
-                }
-            }
-        }
-        return super.dispatchTouchEvent(ev)
     }
 
     override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
@@ -196,13 +181,11 @@ class TocActivity : VMBaseActivity<ActivityChapterListBinding, TocViewModel>(),
         waitDialog.show()
         viewModel.upBookTocRule(book) {
             waitDialog.dismiss()
-            ReadBook.book?.let { readBook ->
-                if (readBook == book) {
-                    ReadBook.book = book
-                    ReadBook.chapterSize = book.totalChapterNum
-                    ReadBook.simulatedChapterSize = book.simulatedTotalChapterNum()
+            if (ReadBook.book == book) {
+                if (it == null) {
                     ReadBook.upMsg(null)
-                    ReadBook.loadContent(resetPageOffset = true)
+                } else {
+                    ReadBook.upMsg("LoadTocError:${it.localizedMessage}")
                 }
             }
         }

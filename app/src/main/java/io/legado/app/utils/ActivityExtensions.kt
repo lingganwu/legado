@@ -18,7 +18,6 @@ import androidx.annotation.ColorInt
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
 import androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
 import androidx.fragment.app.DialogFragment
 import io.legado.app.R
@@ -35,6 +34,14 @@ inline fun <reified T : DialogFragment> AppCompatActivity.showDialogFragment(
     dialog.show(supportFragmentManager, T::class.simpleName)
 }
 
+inline fun <reified T : DialogFragment> AppCompatActivity.dismissDialogFragment() {
+    supportFragmentManager.fragments.forEach {
+        if (it is T) {
+            it.dismissAllowingStateLoss()
+        }
+    }
+}
+
 fun AppCompatActivity.showDialogFragment(dialogFragment: DialogFragment) {
     dialogFragment.show(supportFragmentManager, dialogFragment::class.simpleName)
 }
@@ -45,7 +52,9 @@ val WindowManager.windowSize: DisplayMetrics
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             val windowMetrics: WindowMetrics = currentWindowMetrics
             val insets = windowMetrics.windowInsets
-                .getInsetsIgnoringVisibility(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
+                .getInsetsIgnoringVisibility(
+                    WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout()
+                )
             val windowWidth = windowMetrics.bounds.width()
             val windowHeight = windowMetrics.bounds.height()
             var insetsWidth = insets.left + insets.right
@@ -177,13 +186,12 @@ fun Activity.keepScreenOn(on: Boolean) {
     }
 }
 
-fun Activity.toggleNavigationBar(show: Boolean) {
+fun Activity.toggleSystemBar(show: Boolean) {
     WindowCompat.getInsetsController(window, window.decorView).run {
         if (show) {
-            show(WindowInsetsCompat.Type.navigationBars())
-            systemBarsBehavior = BEHAVIOR_DEFAULT
+            show(WindowInsetsCompat.Type.systemBars())
         } else {
-            hide(WindowInsetsCompat.Type.navigationBars())
+            hide(WindowInsetsCompat.Type.systemBars())
             systemBarsBehavior = BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
     }

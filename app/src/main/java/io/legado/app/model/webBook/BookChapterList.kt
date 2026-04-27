@@ -16,6 +16,8 @@ import io.legado.app.help.book.simulatedTotalChapterNum
 import io.legado.app.help.config.AppConfig
 import io.legado.app.model.Debug
 import io.legado.app.model.analyzeRule.AnalyzeRule
+import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setChapter
+import io.legado.app.model.analyzeRule.AnalyzeRule.Companion.setCoroutineContext
 import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.utils.isTrue
 import io.legado.app.utils.mapAsync
@@ -70,7 +72,6 @@ object BookChapterList {
                         mUrl = nextUrl,
                         source = bookSource,
                         ruleData = book,
-                        headerMapF = bookSource.getHeaderMap(),
                         coroutineContext = coroutineContext
                     )
                     val res = analyzeUrl.getStrResponseAwait() //控制并发访问
@@ -100,7 +101,6 @@ object BookChapterList {
                         mUrl = urlStr,
                         source = bookSource,
                         ruleData = book,
-                        headerMapF = bookSource.getHeaderMap(),
                         coroutineContext = coroutineContext
                     )
                     val res = analyzeUrl.getStrResponseAwait() //控制并发访问
@@ -150,7 +150,7 @@ object BookChapterList {
                 }
             }
         }
-        val replaceRules = ContentProcessor.get(book.name, book.origin).getTitleReplaceRules()
+        val replaceRules = ContentProcessor.get(book).getTitleReplaceRules()
         book.durChapterTitle = list.getOrElse(book.durChapterIndex) { list.last() }
             .getDisplayTitle(replaceRules, book.getUseReplaceRule())
         if (book.totalChapterNum < list.size) {
@@ -218,7 +218,7 @@ object BookChapterList {
                 coroutineContext.ensureActive()
                 analyzeRule.setContent(item)
                 val bookChapter = BookChapter(bookUrl = book.bookUrl, baseUrl = redirectUrl)
-                analyzeRule.chapter = bookChapter
+                analyzeRule.setChapter(bookChapter)
                 bookChapter.title = analyzeRule.getString(nameRule)
                 bookChapter.url = analyzeRule.getString(urlRule)
                 bookChapter.tag = analyzeRule.getString(upTimeRule)

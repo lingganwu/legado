@@ -1,6 +1,7 @@
 package io.legado.app.help.storage
 
 import android.content.Context
+import android.database.sqlite.SQLiteConstraintException
 import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
 import io.legado.app.BuildConfig
@@ -31,6 +32,7 @@ import io.legado.app.help.book.upType
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.help.config.ThemeConfig
+import io.legado.app.model.BookCover
 import io.legado.app.model.localBook.LocalBook
 import io.legado.app.utils.ACache
 import io.legado.app.utils.FileUtils
@@ -105,20 +107,22 @@ object Restore {
                 .forEach { book ->
                     book.coverUrl = LocalBook.getCoverPath(book)
                 }
-            val updateBooks = arrayListOf<Book>()
             val newBooks = arrayListOf<Book>()
             val ignoreLocalBook = BackupConfig.ignoreLocalBook
             it.forEach { book ->
                 if (ignoreLocalBook && book.isLocal) {
                     return@forEach
                 }
-                if (appDb.bookDao.has(book.bookUrl) == true) {
-                    updateBooks.add(book)
+                if (appDb.bookDao.has(book.bookUrl)) {
+                    try {
+                        appDb.bookDao.update(book)
+                    } catch (_: SQLiteConstraintException) {
+                        appDb.bookDao.insert(book)
+                    }
                 } else {
                     newBooks.add(book)
                 }
             }
-            appDb.bookDao.update(*updateBooks.toTypedArray())
             appDb.bookDao.insert(*newBooks.toTypedArray())
         }
         fileToListT<Bookmark>(path, "bookmark.json")?.let {
@@ -207,6 +211,14 @@ object Restore {
             ThemeConfig.upConfig()
         }?.onFailure {
             AppLog.put("恢复主题出错\n${it.localizedMessage}", it)
+        }
+        File(path, BookCover.configFileName).takeIf {
+            it.exists()
+        }?.runCatching {
+            val json = readText()
+            BookCover.saveCoverRule(json)
+        }?.onFailure {
+            AppLog.put("恢复封面规则出错\n${it.localizedMessage}", it)
         }
         if (!BackupConfig.ignoreReadConfig) {
             //恢复阅读界面配置

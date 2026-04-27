@@ -24,7 +24,16 @@
  */
 package com.script.rhino
 
+import android.os.Build
 import org.mozilla.javascript.ClassShutter
+import org.mozilla.javascript.Context
+import org.mozilla.javascript.Scriptable
+import java.io.ObjectInputStream
+import java.io.ObjectOutputStream
+import java.lang.reflect.Member
+import java.nio.file.FileSystem
+import java.nio.file.Path
+import java.util.Collections
 
 /**
  * This class prevents script access to certain sensitive classes.
@@ -36,44 +45,146 @@ import org.mozilla.javascript.ClassShutter
  */
 object RhinoClassShutter : ClassShutter {
 
-    private val protectedClasses by lazy {
-        hashSetOf(
-            "dalvik.system",
+    private val protectedClassNamesMatcher by lazy {
+        listOf(
             "java.lang.Class",
             "java.lang.ClassLoader",
             "java.net.URLClassLoader",
-            "cn.hutool.core.lang.JarClassLoader",
-            "org.mozilla.javascript.DefiningClassLoader",
             "java.lang.Runtime",
+            "java.lang.ProcessBuilder",
+            "java.lang.ProcessImpl",
+            "java.lang.UNIXProcess",
             "java.io.File",
+            "java.io.FileDescriptor",
+            "java.io.FileInputStream",
+            "java.io.FileOutputStream",
+            "java.io.PrintStream",
+            "java.io.FileReader",
+            "java.io.FileWriter",
+            "java.io.PrintWriter",
+            "java.io.UnixFileSystem",
+            "java.io.RandomAccessFile",
+            "java.io.ObjectInputStream",
+            "java.io.ObjectOutputStream",
             "java.security.AccessController",
             "java.nio.file.Paths",
             "java.nio.file.Files",
+            "java.nio.file.FileSystems",
+            "java.util.Formatter",
+            "sun.misc.Unsafe",
+            "android.content.Intent",
+            "android.provider.Settings",
+            "android.app.ActivityThread",
+            "android.app.AppGlobals",
+            "android.os.Looper",
+            "android.os.Process",
+            "android.os.FileUtils",
+
+            "cn.hutool.core.lang.JarClassLoader",
+            "cn.hutool.core.lang.Singleton",
+            "cn.hutool.core.util.RuntimeUtil",
+            "cn.hutool.core.util.ClassLoaderUtil",
+            "cn.hutool.core.util.ReflectUtil",
+            "cn.hutool.core.util.SerializeUtil",
+            "cn.hutool.core.util.ClassUtil",
+            "org.mozilla.javascript.DefiningClassLoader",
             "io.legado.app.data.AppDatabase",
+            "io.legado.app.data.AppDatabase_Impl",
             "io.legado.app.data.AppDatabaseKt",
             "io.legado.app.utils.ContextExtensionsKt",
-            "android.content.Intent",
             "androidx.core.content.FileProvider",
-            "android.provider.Settings",
-            "androidx.sqlite.db",
             "splitties.init.AppCtxKt",
-            "android.app.ActivityThread",
-            "android.app.AppGlobals"
-        )
+            "okio.JvmSystemFileSystem",
+            "okio.JvmFileHandle",
+            "okio.NioSystemFileSystem",
+            "okio.NioFileSystemFileHandle",
+            "okio.Path",
+
+            "android.system",
+            "android.database",
+            "androidx.sqlite.db",
+            "androidx.room",
+            "cn.hutool.core.io",
+            "cn.hutool.core.bean",
+            "cn.hutool.core.lang.reflect",
+            "dalvik.system",
+            "java.nio.file",
+            "java.lang.reflect",
+            "java.lang.invoke",
+            "io.legado.app.data.dao",
+            "com.script",
+            "org.mozilla",
+            "sun",
+            "libcore",
+        ).let { ClassNameMatcher(it) }
+    }
+
+    private val systemClassProtectedName by lazy {
+        Collections.unmodifiableSet(hashSetOf("load", "loadLibrary", "exit"))
+    }
+
+    private val protectedClasses by lazy {
+        arrayOf(
+            ClassLoader::class.java,
+            Class::class.java,
+            Member::class.java,
+            Context::class.java,
+            ObjectInputStream::class.java,
+            ObjectOutputStream::class.java,
+            okio.FileSystem::class.java,
+            okio.FileHandle::class.java,
+            okio.Path::class.java,
+            android.content.Context::class.java,
+        ) + if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            arrayOf(FileSystem::class.java, Path::class.java)
+        } else {
+            emptyArray()
+        }
+    }
+
+    fun visibleToScripts(obj: Any): Boolean {
+        when (obj) {
+            is ClassLoader,
+            is Class<*>,
+            is Member,
+            is Context,
+            is ObjectInputStream,
+            is ObjectOutputStream,
+            is okio.FileSystem,
+            is okio.FileHandle,
+            is okio.Path,
+            is android.content.Context -> return false
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            when (obj) {
+                is FileSystem,
+                is Path -> return false
+            }
+        }
+        return visibleToScripts(obj.javaClass.name)
+    }
+
+    fun visibleToScripts(clazz: Class<*>): Boolean {
+        protectedClasses.forEach {
+            if (it.isAssignableFrom(clazz)) {
+                return false
+            }
+        }
+        return true
+    }
+
+    fun wrapJavaClass(scope: Scriptable, javaClass: Class<*>): Scriptable {
+        return when (javaClass) {
+            System::class.java -> {
+                ProtectedNativeJavaClass(scope, javaClass, systemClassProtectedName)
+            }
+
+            else -> ProtectedNativeJavaClass(scope, javaClass)
+        }
     }
 
     override fun visibleToScripts(fullClassName: String): Boolean {
-        if (!protectedClasses.contains(fullClassName)) {
-            var className = fullClassName
-            while (className.contains(".")) {
-                className = className.substringBeforeLast(".")
-                if (protectedClasses.contains(className)) {
-                    return false
-                }
-            }
-            return true
-        }
-        return false
+        return !protectedClassNamesMatcher.match(fullClassName)
     }
 
 }

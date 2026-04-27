@@ -8,6 +8,7 @@ import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.PopupMenu
 import androidx.core.os.bundleOf
+import androidx.core.view.doOnLayout
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import io.legado.app.R
@@ -29,8 +30,11 @@ import io.legado.app.utils.visible
 import java.util.Collections
 
 
-class BookSourceAdapter(context: Context, val callBack: CallBack) :
-    RecyclerAdapter<BookSourcePart, ItemBookSourceBinding>(context),
+class BookSourceAdapter(
+    context: Context,
+    private val callBack: CallBack,
+    private val recyclerView: RecyclerView
+) : RecyclerAdapter<BookSourcePart, ItemBookSourceBinding>(context),
     ItemTouchCallback.Callback {
 
     private val selected = linkedSetOf<BookSourcePart>()
@@ -104,7 +108,7 @@ class BookSourceAdapter(context: Context, val callBack: CallBack) :
             } else {
                 for (i in payloads.indices) {
                     val bundle = payloads[i] as Bundle
-                    bundle.keySet().map {
+                    bundle.keySet().forEach {
                         when (it) {
                             "enabled" -> swtEnabled.isChecked = bundle.getBoolean("enabled")
                             "upName" -> cbBookSource.text = item.getDisPlayNameGroup()
@@ -121,24 +125,20 @@ class BookSourceAdapter(context: Context, val callBack: CallBack) :
 
     override fun registerListener(holder: ItemViewHolder, binding: ItemBookSourceBinding) {
         binding.apply {
-            swtEnabled.setOnCheckedChangeListener { view, checked ->
+            swtEnabled.setOnUserCheckedChangeListener { checked ->
                 getItem(holder.layoutPosition)?.let {
-                    if (view.isPressed) {
-                        it.enabled = checked
-                        callBack.enable(checked, it)
-                    }
+                    it.enabled = checked
+                    callBack.enable(checked, it)
                 }
             }
-            cbBookSource.setOnCheckedChangeListener { view, checked ->
+            cbBookSource.setOnUserCheckedChangeListener { checked ->
                 getItem(holder.layoutPosition)?.let {
-                    if (view.isPressed) {
-                        if (checked) {
-                            selected.add(it)
-                        } else {
-                            selected.remove(it)
-                        }
-                        callBack.upCountView()
+                    if (checked) {
+                        selected.add(it)
+                    } else {
+                        selected.remove(it)
                     }
+                    callBack.upCountView()
                 }
             }
             ivEdit.setOnClickListener {
@@ -154,8 +154,10 @@ class BookSourceAdapter(context: Context, val callBack: CallBack) :
 
     override fun onCurrentListChanged() {
         callBack.upCountView()
-        handler.post {
-            notifyItemRangeChanged(0, itemCount, bundleOf("upSourceHost" to null))
+        recyclerView.doOnLayout {
+            handler.post {
+                notifyItemRangeChanged(0, itemCount, bundleOf("upSourceHost" to null))
+            }
         }
     }
 

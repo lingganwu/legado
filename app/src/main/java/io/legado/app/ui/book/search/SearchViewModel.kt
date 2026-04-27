@@ -30,6 +30,7 @@ class SearchViewModel(application: Application) : BaseViewModel(application) {
     var searchFinishLiveData = MutableLiveData<Boolean>()
     var isSearchLiveData = MutableLiveData<Boolean>()
     var searchKey: String = ""
+    var hasMore = true
     private var searchID = 0L
     private val searchModel = SearchModel(viewModelScope, object : SearchModel.CallBack {
 
@@ -45,7 +46,8 @@ class SearchViewModel(application: Application) : BaseViewModel(application) {
             searchBookLiveData.postValue(searchBooks)
         }
 
-        override fun onSearchFinish(isEmpty: Boolean) {
+        override fun onSearchFinish(isEmpty: Boolean, hasMore: Boolean) {
+            this@SearchViewModel.hasMore = hasMore
             isSearchLiveData.postValue(false)
             searchFinishLiveData.postValue(isEmpty)
         }
@@ -67,6 +69,7 @@ class SearchViewModel(application: Application) : BaseViewModel(application) {
                     .forEach {
                         keys.add("${it.name}-${it.author}")
                         keys.add(it.name)
+                        keys.add(it.bookUrl)
                     }
                 keys
             }.catch {
@@ -81,12 +84,12 @@ class SearchViewModel(application: Application) : BaseViewModel(application) {
         }
     }
 
-    fun isInBookShelf(name: String, author: String): Boolean {
-        return if (author.isNotBlank()) {
-            bookshelf.contains("$name-$author")
-        } else {
-            bookshelf.contains(name)
-        }
+    fun isInBookShelf(book: SearchBook): Boolean {
+        val name = book.name
+        val author = book.author
+        val bookUrl = book.bookUrl
+        val key = if (author.isNotBlank()) "$name-$author" else name
+        return bookshelf.contains(key) || bookshelf.contains(bookUrl)
     }
 
     /**
@@ -99,6 +102,7 @@ class SearchViewModel(application: Application) : BaseViewModel(application) {
                 searchID = System.currentTimeMillis()
                 searchBookLiveData.postValue(emptyList())
                 searchKey = key
+                hasMore = true
             }
             if (searchKey.isEmpty()) {
                 return@execute
@@ -112,6 +116,14 @@ class SearchViewModel(application: Application) : BaseViewModel(application) {
      */
     fun stop() {
         searchModel.cancelSearch()
+    }
+
+    fun pause() {
+        searchModel.pause()
+    }
+
+    fun resume() {
+        searchModel.resume()
     }
 
     /**

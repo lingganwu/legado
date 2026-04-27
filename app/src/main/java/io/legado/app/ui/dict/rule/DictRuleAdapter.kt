@@ -103,7 +103,7 @@ class DictRuleAdapter(context: Context, var callBack: CallBack) :
             } else {
                 for (i in payloads.indices) {
                     val bundle = payloads[i] as Bundle
-                    bundle.keySet().map {
+                    bundle.keySet().forEach {
                         when (it) {
                             "selected" -> cbName.isChecked = selected.contains(item)
                             "upName" -> cbName.text = item.name
@@ -117,12 +117,10 @@ class DictRuleAdapter(context: Context, var callBack: CallBack) :
 
     override fun registerListener(holder: ItemViewHolder, binding: ItemDictRuleBinding) {
         binding.apply {
-            swtEnabled.setOnCheckedChangeListener { buttonView, isChecked ->
-                if (buttonView.isPressed) {
-                    getItem(holder.layoutPosition)?.let {
-                        it.enabled = isChecked
-                        callBack.update(it)
-                    }
+            swtEnabled.setOnUserCheckedChangeListener { isChecked ->
+                getItem(holder.layoutPosition)?.let {
+                    it.enabled = isChecked
+                    callBack.update(it)
                 }
             }
             cbName.setOnClickListener {
@@ -143,7 +141,6 @@ class DictRuleAdapter(context: Context, var callBack: CallBack) :
             ivDelete.setOnClickListener {
                 getItem(holder.layoutPosition)?.let {
                     callBack.delete(it)
-                    selected.remove(it)
                 }
             }
         }

@@ -16,6 +16,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.sync.Semaphore
 import kotlin.coroutines.CoroutineContext
 
 abstract class BaseService : LifecycleService() {
@@ -28,8 +29,9 @@ abstract class BaseService : LifecycleService() {
         context: CoroutineContext = Dispatchers.IO,
         start: CoroutineStart = CoroutineStart.DEFAULT,
         executeContext: CoroutineContext = Dispatchers.Main,
+        semaphore: Semaphore? = null,
         block: suspend CoroutineScope.() -> T
-    ) = Coroutine.async(scope, context, start, executeContext, block)
+    ) = Coroutine.async(scope, context, start, executeContext, semaphore, block)
 
     @CallSuper
     override fun onCreate() {
@@ -69,9 +71,9 @@ abstract class BaseService : LifecycleService() {
     }
 
     @CallSuper
-    override fun onTimeout(startId: Int) {
-        super.onTimeout(startId)
-        LogUtils.d(simpleName, "onTimeout startId:$startId")
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        super.onTimeout(startId, fgsType)
+        LogUtils.d(simpleName, "onTimeout startId:$startId fgsType:$fgsType")
         stopSelf()
     }
 

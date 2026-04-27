@@ -17,10 +17,8 @@ import io.legado.app.help.DefaultData
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.addType
 import io.legado.app.help.book.isLocal
-import io.legado.app.help.book.isSameNameAuthor
 import io.legado.app.help.book.isUpError
 import io.legado.app.help.book.removeType
-import io.legado.app.help.book.simulatedTotalChapterNum
 import io.legado.app.help.book.sync
 import io.legado.app.help.config.AppConfig
 import io.legado.app.model.CacheBook
@@ -31,7 +29,9 @@ import io.legado.app.utils.onEachParallel
 import io.legado.app.utils.postEvent
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.flow
@@ -58,6 +58,10 @@ class MainViewModel(application: Application) : BaseViewModel(application) {
     }
     val booksGridRecycledViewPool = RecycledViewPool().apply {
         setMaxRecycledViews(0, 100)
+    }
+
+    init {
+        deleteNotShelfBook()
     }
 
     override fun onCleared() {
@@ -154,9 +158,10 @@ class MainViewModel(application: Application) : BaseViewModel(application) {
         }
         kotlin.runCatching {
             val oldBook = book.copy()
-            WebBook.runPreUpdateJs(source, book)
             if (book.tocUrl.isBlank()) {
                 WebBook.getBookInfoAwait(source, book)
+            } else {
+                WebBook.runPreUpdateJs(source, book)
             }
             val toc = WebBook.getChapterListAwait(source, book).getOrThrow()
             book.sync(oldBook)
@@ -164,18 +169,15 @@ class MainViewModel(application: Application) : BaseViewModel(application) {
             if (book.bookUrl == bookUrl) {
                 appDb.bookDao.update(book)
             } else {
-                appDb.bookDao.insert(book)
+                appDb.bookDao.replace(oldBook, book)
                 BookHelp.updateCacheFolder(oldBook, book)
             }
             appDb.bookChapterDao.delByBook(bookUrl)
             appDb.bookChapterDao.insert(*toc.toTypedArray())
-            if (book.isSameNameAuthor(ReadBook.book)) {
-                ReadBook.book = book
-                ReadBook.chapterSize = book.totalChapterNum
-                ReadBook.simulatedChapterSize = book.simulatedTotalChapterNum()
-            }
+            ReadBook.onChapterListUpdated(book)
             addDownload(source, book)
         }.onFailure {
+            currentCoroutineContext().ensureActive()
             AppLog.put("${book.name} 更新目录失败\n${it.localizedMessage}", it)
             //这里可能因为时间太长书籍信息已经更改,所以重新获取
             appDb.bookDao.getBook(book.bookUrl)?.let { book ->
@@ -208,29 +210,17 @@ class MainViewModel(application: Application) : BaseViewModel(application) {
      * 缓存书籍
      */
     private fun cacheBook() {
+        if (AppConfig.preDownloadNum == 0) return
         cacheBookJob?.cancel()
         cacheBookJob = viewModelScope.launch(upTocPool) {
-            while (isActive) {
-                if (CacheBookService.isRun || !CacheBook.isRun) {
-                    cacheBookJob?.cancel()
-                    cacheBookJob = null
-                    return@launch
-                }
-                CacheBook.cacheBookMap.forEach {
-                    val cacheBookModel = it.value
-                    while (cacheBookModel.waitCount > 0) {
-                        //有目录更新是不缓存,优先更新目录,现在更多网站限制并发
-                        if (waitUpTocBooks.isEmpty()
-                            && onUpTocBooks.isEmpty()
-                            && CacheBook.onDownloadCount < threadCount
-                        ) {
-                            cacheBookModel.download(this, upTocPool)
-                        } else {
-                            delay(100)
-                        }
-                    }
+            launch {
+                while (isActive && CacheBook.isRun) {
+                    //有目录更新是不缓存,优先更新目录,现在更多网站限制并发
+                    CacheBook.setWorkingState(waitUpTocBooks.isEmpty() && onUpTocBooks.isEmpty())
+                    delay(1000)
                 }
             }
+            CacheBook.startProcessJob(upTocPool)
         }
     }
 
@@ -250,7 +240,7 @@ class MainViewModel(application: Application) : BaseViewModel(application) {
         }
     }
 
-    fun deleteNotShelfBook() {
+    private fun deleteNotShelfBook() {
         execute {
             appDb.bookDao.deleteNotShelfBook()
         }

@@ -4,13 +4,10 @@ import android.annotation.SuppressLint
 import android.content.pm.ActivityInfo
 import android.net.Uri
 import android.net.http.SslError
-import android.os.Build
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
-import android.view.WindowInsets
-import android.view.WindowInsetsController
 import android.webkit.CookieManager
 import android.webkit.SslErrorHandler
 import android.webkit.URLUtil
@@ -25,11 +22,14 @@ import androidx.core.view.size
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
 import io.legado.app.constant.AppConst
+import io.legado.app.constant.AppConst.imagePathKey
 import io.legado.app.databinding.ActivityWebViewBinding
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.http.CookieStore
 import io.legado.app.help.source.SourceVerificationHelp
 import io.legado.app.lib.dialogs.SelectItem
+import io.legado.app.lib.dialogs.alert
+import io.legado.app.lib.dialogs.selector
 import io.legado.app.lib.theme.accentColor
 import io.legado.app.model.Download
 import io.legado.app.ui.association.OnLineImportActivity
@@ -43,16 +43,16 @@ import io.legado.app.utils.openUrl
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.setDarkeningAllowed
 import io.legado.app.utils.startActivity
-import io.legado.app.utils.toggleNavigationBar
+import io.legado.app.utils.toggleSystemBar
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import io.legado.app.utils.visible
 import java.net.URLDecoder
+import io.legado.app.help.http.CookieManager as AppCookieManager
 
 class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
 
     override val binding by viewBinding(ActivityWebViewBinding::inflate)
     override val viewModel by viewModels<WebViewModel>()
-    private val imagePathKey = "imagePath"
     private var customWebViewCallback: WebChromeClient.CustomViewCallback? = null
     private var webPic: String? = null
     private var isCloudflareChallenge = false
@@ -101,6 +101,14 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
         return super.onCompatCreateOptionsMenu(menu)
     }
 
+    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
+        if (viewModel.sourceOrigin.isNotEmpty()) {
+            menu.findItem(R.id.menu_disable_source)?.isVisible = true
+            menu.findItem(R.id.menu_delete_source)?.isVisible = true
+        }
+        return super.onPrepareOptionsMenu(menu)
+    }
+
     override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
             R.id.menu_open_in_browser -> openUrl(viewModel.baseUrl)
@@ -116,6 +124,23 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
             }
 
             R.id.menu_full_screen -> toggleFullScreen()
+            R.id.menu_disable_source -> {
+                viewModel.disableSource {
+                    finish()
+                }
+            }
+
+            R.id.menu_delete_source -> {
+                alert(R.string.draw) {
+                    setMessage(getString(R.string.sure_del) + "\n" + viewModel.sourceName)
+                    noButton()
+                    yesButton {
+                        viewModel.deleteSource {
+                            finish()
+                        }
+                    }
+                }
+            }
         }
         return super.onCompatOptionsItemSelected(item)
     }
@@ -124,35 +149,16 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
     private fun toggleFullScreen() {
         isFullScreen = !isFullScreen
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            // For API 30 and above
-            val windowInsetsController = window.insetsController
-            windowInsetsController?.let {
-                if (isFullScreen) {
-                    it.systemBarsBehavior =
-                        WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                    it.hide(WindowInsets.Type.systemBars())
-                    supportActionBar?.hide()
-                } else {
-                    it.show(WindowInsets.Type.systemBars())
-                    supportActionBar?.show()
-                }
-            }
+        toggleSystemBar(!isFullScreen)
+
+        if (isFullScreen) {
+            supportActionBar?.hide()
         } else {
-            // For older APIs
-            @Suppress("DEPRECATION")
-            window.decorView.systemUiVisibility = if (isFullScreen) {
-                (View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                        or View.SYSTEM_UI_FLAG_FULLSCREEN
-                        or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION)
-            } else {
-                View.SYSTEM_UI_FLAG_VISIBLE
-            }
-            supportActionBar?.let { if (isFullScreen) it.hide() else it.show() }
+            supportActionBar?.show()
         }
     }
 
-    @SuppressLint("JavascriptInterface", "SetJavaScriptEnabled")
+    @SuppressLint("SetJavaScriptEnabled")
     private fun initWebView(url: String, headerMap: HashMap<String, String>) {
         binding.progressBar.fontColor = accentColor
         binding.webView.webChromeClient = CustomWebChromeClient()
@@ -171,16 +177,24 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
                 userAgentString = it
             }
         }
-        val cookieManager = CookieManager.getInstance()
-        cookieManager.setCookie(url, CookieStore.getCookie(url))
-        binding.webView.addJavascriptInterface(this, "app")
+        AppCookieManager.applyToWebView(url)
         binding.webView.setOnLongClickListener {
             val hitTestResult = binding.webView.hitTestResult
             if (hitTestResult.type == WebView.HitTestResult.IMAGE_TYPE ||
                 hitTestResult.type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE
             ) {
-                hitTestResult.extra?.let {
-                    saveImage(it)
+                hitTestResult.extra?.let { webPic ->
+                    selector(
+                        arrayListOf(
+                            SelectItem(getString(R.string.action_save), "save"),
+                            SelectItem(getString(R.string.select_folder), "selectFolder")
+                        )
+                    ) { _, charSequence, _ ->
+                        when (charSequence.value) {
+                            "save" -> saveImage(webPic)
+                            "selectFolder" -> selectSaveFolder()
+                        }
+                    }
                     return@setOnLongClickListener true
                 }
             }
@@ -240,7 +254,7 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
             binding.customWebView.addView(view)
             customWebViewCallback = callback
             keepScreenOn(true)
-            toggleNavigationBar(false)
+            toggleSystemBar(false)
         }
 
         override fun onHideCustomView() {
@@ -248,7 +262,7 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
             binding.llView.visible()
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
             keepScreenOn(false)
-            toggleNavigationBar(true)
+            toggleSystemBar(true)
         }
     }
 

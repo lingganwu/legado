@@ -3,6 +3,7 @@ package io.legado.app.service
 import android.annotation.SuppressLint
 import android.app.PendingIntent
 import android.net.Uri
+import androidx.core.net.toUri
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -15,6 +16,7 @@ import androidx.media3.datasource.cache.CacheDataSink
 import androidx.media3.datasource.cache.CacheDataSource
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.offline.DefaultDownloaderFactory
 import androidx.media3.exoplayer.offline.DownloadRequest
@@ -36,6 +38,7 @@ import io.legado.app.help.http.okHttpClient
 import io.legado.app.model.ReadAloud
 import io.legado.app.model.ReadBook
 import io.legado.app.model.analyzeRule.AnalyzeUrl
+import io.legado.app.ui.book.read.page.entities.TextChapter
 import io.legado.app.utils.FileUtils
 import io.legado.app.utils.MD5Utils
 import io.legado.app.utils.printOnDebug
@@ -43,10 +46,15 @@ import io.legado.app.utils.servicePendingIntent
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers.Main
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
@@ -58,7 +66,7 @@ import java.io.File
 import java.io.InputStream
 import java.net.ConnectException
 import java.net.SocketTimeoutException
-import kotlin.coroutines.coroutineContext
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * 在线朗读
@@ -67,7 +75,14 @@ import kotlin.coroutines.coroutineContext
 class HttpReadAloudService : BaseReadAloudService(),
     Player.Listener {
     private val exoPlayer: ExoPlayer by lazy {
-        ExoPlayer.Builder(this).build()
+        ExoPlayer.Builder(this).setLoadControl(
+            DefaultLoadControl.Builder().setBufferDurationsMs(
+                1800_000_000,
+                1800_000_000,
+                DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS,
+                DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS
+            ).build()
+        ).build()
     }
     private val ttsFolderPath: String by lazy {
         cacheDir.absolutePath + File.separator + "httpTTS" + File.separator
@@ -92,6 +107,7 @@ class HttpReadAloudService : BaseReadAloudService(),
     private var downloadErrorNo: Int = 0
     private var playErrorNo = 0
     private val downloadTaskActiveLock = Mutex()
+    private val loadingState = MutableStateFlow(false)
 
     override fun onCreate() {
         super.onCreate()
@@ -196,8 +212,8 @@ class HttpReadAloudService : BaseReadAloudService(),
             .take(10)
             .toList()
         contentList.forEach { content ->
-            coroutineContext.ensureActive()
-            val fileName = md5SpeakFileName(content)
+            currentCoroutineContext().ensureActive()
+            val fileName = md5SpeakFileName(content, textChapter)
             val speakText = content.replace(AppPattern.notReadAloudRegex, "")
             if (speakText.isEmpty()) {
                 createSilentSound(fileName)
@@ -240,8 +256,6 @@ class HttpReadAloudService : BaseReadAloudService(),
                     }
                     val fileName = md5SpeakFileName(text)
                     val dataSourceFactory = createDataSourceFactory(httpTts, speakText)
-                    val downloader = createDownloader(dataSourceFactory, fileName)
-                    downloaderChannel.send(downloader)
                     val mediaSource = createMediaSource(dataSourceFactory, fileName)
                     launch(Main) {
                         exoPlayer.addMediaSource(mediaSource)
@@ -254,6 +268,7 @@ class HttpReadAloudService : BaseReadAloudService(),
         }
     }
 
+    @OptIn(FlowPreview::class)
     private suspend fun preDownloadAudiosStream(
         httpTts: HttpTTS,
         downloaderChannel: Channel<Downloader>
@@ -262,15 +277,16 @@ class HttpReadAloudService : BaseReadAloudService(),
         val contentList = textChapter.getNeedReadAloud(0, readAloudByPage, 0, 1)
             .splitToSequence("\n")
             .filter { it.isNotEmpty() }
-            .take(10)
             .toList()
+        val flow = loadingState.debounce(1.seconds)
         contentList.forEach { content ->
-            coroutineContext.ensureActive()
-            val fileName = md5SpeakFileName(content)
+            currentCoroutineContext().ensureActive()
+            val fileName = md5SpeakFileName(content, textChapter)
             val speakText = content.replace(AppPattern.notReadAloudRegex, "")
             val dataSourceFactory = createDataSourceFactory(httpTts, speakText)
             val downloader = createDownloader(dataSourceFactory, fileName)
             downloaderChannel.send(downloader)
+            flow.first { !it }
         }
     }
 
@@ -284,12 +300,14 @@ class HttpReadAloudService : BaseReadAloudService(),
                     null
                 } else {
                     kotlin.runCatching {
-                        runBlocking {
+                        runBlocking(lifecycleScope.coroutineContext[Job]!!) {
                             getSpeakStream(httpTts, speakText)
                         }
                     }.onFailure {
                         when (it) {
-                            is InterruptedException -> Unit
+                            is InterruptedException,
+                            is CancellationException -> Unit
+
                             else -> pauseReadAloud()
                         }
                     }.getOrThrow()
@@ -304,7 +322,7 @@ class HttpReadAloudService : BaseReadAloudService(),
     }
 
     private fun createDownloader(factory: CacheDataSource.Factory, fileName: String): Downloader {
-        val uri = Uri.parse(fileName)
+        val uri = fileName.toUri()
         val request = DownloadRequest.Builder(fileName, uri).build()
         return DefaultDownloaderFactory(factory, okHttpClient.dispatcher.executorService)
             .createDownloader(request)
@@ -328,28 +346,30 @@ class HttpReadAloudService : BaseReadAloudService(),
                     speakText = speakText,
                     speakSpeed = speechRate,
                     source = httpTts,
-                    headerMapF = httpTts.getHeaderMap(true),
                     readTimeout = 300 * 1000L,
-                    coroutineContext = coroutineContext
+                    coroutineContext = currentCoroutineContext()
                 )
                 var response = analyzeUrl.getResponseAwait()
-                coroutineContext.ensureActive()
+                currentCoroutineContext().ensureActive()
                 val checkJs = httpTts.loginCheckJs
                 if (checkJs?.isNotBlank() == true) {
                     response = analyzeUrl.evalJS(checkJs, response) as Response
                 }
                 response.headers["Content-Type"]?.let { contentType ->
+                    val contentType = contentType.substringBefore(";")
                     val ct = httpTts.contentType
-                    if (contentType == "application/json") {
-                        throw NoStackTraceException(response.body!!.string())
+                    if (contentType == "application/json" || contentType.startsWith("text/")) {
+                        throw NoStackTraceException(response.body.string())
                     } else if (ct?.isNotBlank() == true) {
                         if (!contentType.matches(ct.toRegex())) {
-                            throw NoStackTraceException("TTS服务器返回错误：" + response.body!!.string())
+                            throw NoStackTraceException(
+                                "TTS服务器返回错误：" + response.body.string()
+                            )
                         }
                     }
                 }
-                coroutineContext.ensureActive()
-                response.body!!.byteStream().let { stream ->
+                currentCoroutineContext().ensureActive()
+                response.body.byteStream().let { stream ->
                     downloadErrorNo = 0
                     return stream
                 }
@@ -391,7 +411,10 @@ class HttpReadAloudService : BaseReadAloudService(),
         return null
     }
 
-    private fun md5SpeakFileName(content: String): String {
+    private fun md5SpeakFileName(
+        content: String,
+        textChapter: TextChapter? = this.textChapter
+    ): String {
         return MD5Utils.md5Encode16(textChapter?.title ?: "") + "_" +
                 MD5Utils.md5Encode16("${ReadAloud.httpTTS?.url}-|-$speechRate-|-$content")
     }
@@ -473,12 +496,12 @@ class HttpReadAloudService : BaseReadAloudService(),
             val sleep = exoPlayer.duration / speakTextLength
             val start = speakTextLength * exoPlayer.currentPosition / exoPlayer.duration
             for (i in start..contentList[nowSpeak].length) {
-                if (readAloudNumber + i > textChapter.getReadLength(pageIndex + 1)) {
+                if (pageIndex + 1 < textChapter.pageSize
+                    && readAloudNumber + i > textChapter.getReadLength(pageIndex + 1)
+                ) {
                     pageIndex++
-                    if (pageIndex < textChapter.pageSize) {
-                        ReadBook.moveToNextPage()
-                        upTtsProgress(readAloudNumber + i.toInt())
-                    }
+                    ReadBook.moveToNextPage()
+                    upTtsProgress(readAloudNumber + i.toInt())
                 }
                 delay(sleep)
             }
@@ -539,6 +562,10 @@ class HttpReadAloudService : BaseReadAloudService(),
         }
     }
 
+    override fun onIsLoadingChanged(isLoading: Boolean) {
+        loadingState.value = isLoading
+    }
+
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
         if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED) return
         if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
@@ -551,6 +578,7 @@ class HttpReadAloudService : BaseReadAloudService(),
     override fun onPlayerError(error: PlaybackException) {
         super.onPlayerError(error)
         AppLog.put("朗读错误\n${contentList[nowSpeak]}", error)
+        deleteCurrentSpeakFile()
         playErrorNo++
         if (playErrorNo >= 5) {
             toastOnUi("朗读连续5次错误, 最后一次错误代码(${error.localizedMessage})")
@@ -559,7 +587,6 @@ class HttpReadAloudService : BaseReadAloudService(),
         } else {
             if (exoPlayer.hasNextMediaItem()) {
                 exoPlayer.seekToNextMediaItem()
-                exoPlayer.playWhenReady = true
                 exoPlayer.prepare()
             } else {
                 exoPlayer.clearMediaItems()
@@ -568,11 +595,20 @@ class HttpReadAloudService : BaseReadAloudService(),
         }
     }
 
+    private fun deleteCurrentSpeakFile() {
+        if (AppConfig.streamReadAloudAudio) {
+            return
+        }
+        val mediaItem = exoPlayer.currentMediaItem ?: return
+        val filePath = mediaItem.localConfiguration!!.uri.path!!
+        File(filePath).delete()
+    }
+
     override fun aloudServicePendingIntent(actionStr: String): PendingIntent? {
         return servicePendingIntent<HttpReadAloudService>(actionStr)
     }
 
-    inner class CustomLoadErrorHandlingPolicy : DefaultLoadErrorHandlingPolicy(0) {
+    class CustomLoadErrorHandlingPolicy : DefaultLoadErrorHandlingPolicy(0) {
         override fun getRetryDelayMsFor(loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo): Long {
             return C.TIME_UNSET
         }

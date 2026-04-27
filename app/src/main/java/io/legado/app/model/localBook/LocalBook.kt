@@ -6,7 +6,9 @@ import androidx.documentfile.provider.DocumentFile
 import com.script.ScriptBindings
 import com.script.rhino.RhinoScriptEngine
 import io.legado.app.R
-import io.legado.app.constant.*
+import io.legado.app.constant.AppLog
+import io.legado.app.constant.AppPattern
+import io.legado.app.constant.BookType
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.BaseSource
 import io.legado.app.data.entities.Book
@@ -16,17 +18,48 @@ import io.legado.app.exception.NoBooksDirException
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.exception.TocEmptyException
 import io.legado.app.help.AppWebDav
-import io.legado.app.help.book.*
+import io.legado.app.help.book.BookHelp
+import io.legado.app.help.book.ContentProcessor
+import io.legado.app.help.book.addType
+import io.legado.app.help.book.archiveName
+import io.legado.app.help.book.getArchiveUri
+import io.legado.app.help.book.getLocalUri
+import io.legado.app.help.book.getRemoteUrl
+import io.legado.app.help.book.isArchive
+import io.legado.app.help.book.isEpub
+import io.legado.app.help.book.isMobi
+import io.legado.app.help.book.isPdf
+import io.legado.app.help.book.isUmd
+import io.legado.app.help.book.removeLocalUriCache
+import io.legado.app.help.book.simulatedTotalChapterNum
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.webdav.WebDav
 import io.legado.app.lib.webdav.WebDavException
 import io.legado.app.model.analyzeRule.AnalyzeUrl
-import io.legado.app.utils.*
+import io.legado.app.utils.ArchiveUtils
+import io.legado.app.utils.FileDoc
+import io.legado.app.utils.FileUtils
+import io.legado.app.utils.GSON
+import io.legado.app.utils.MD5Utils
+import io.legado.app.utils.externalFiles
+import io.legado.app.utils.fromJsonObject
+import io.legado.app.utils.getFile
+import io.legado.app.utils.inputStream
+import io.legado.app.utils.isAbsUrl
+import io.legado.app.utils.isContentScheme
+import io.legado.app.utils.isDataUrl
+import io.legado.app.utils.printOnDebug
 import kotlinx.coroutines.runBlocking
 import org.apache.commons.text.StringEscapeUtils
 import splitties.init.appCtx
-import java.io.*
+import java.io.ByteArrayInputStream
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileNotFoundException
+import java.io.FileOutputStream
+import java.io.InputStream
 import java.util.regex.Pattern
+import kotlin.coroutines.coroutineContext
 
 /**
  * 书籍文件导入 目录正文解析
@@ -111,10 +144,18 @@ object LocalBook {
         val list = ArrayList(LinkedHashSet(chapters))
         list.forEachIndexed { index, bookChapter ->
             bookChapter.index = index
+            if (bookChapter.title.isEmpty()) {
+                bookChapter.title = "无标题章节"
+            }
         }
-        book.latestChapterTitle = list.last().title
+        val replaceRules = ContentProcessor.get(book).getTitleReplaceRules()
+        book.durChapterTitle = list.getOrElse(book.durChapterIndex) { list.last() }
+            .getDisplayTitle(replaceRules, book.getUseReplaceRule())
+        book.latestChapterTitle =
+            list.getOrElse(book.simulatedTotalChapterNum() - 1) { list.last() }
+                .getDisplayTitle(replaceRules, book.getUseReplaceRule())
         book.totalChapterNum = list.size
-        book.save()
+        book.latestChapterTime = System.currentTimeMillis()
         return list
     }
 
@@ -153,6 +194,11 @@ object LocalBook {
                 return StringEscapeUtils.unescapeHtml4(content)
             }
         }
+
+        if (content.isNullOrEmpty()) {
+            return null
+        }
+
         return content
     }
 
@@ -171,7 +217,7 @@ object LocalBook {
     /**
      * 下载在线的文件并自动导入到阅读（txt umd epub)
      */
-    fun importFileOnLine(
+    suspend fun importFileOnLine(
         str: String,
         fileName: String,
         source: BaseSource? = null,
@@ -207,6 +253,8 @@ object LocalBook {
         } else {
             deleteBook(book, false)
             upBookInfo(book)
+            // 触发 isLocalModified
+            book.latestChapterTime = 0
             //已有书籍说明是更新,删除原有目录
             appDb.bookChapterDao.delByBook(bookUrl)
         }
@@ -230,7 +278,9 @@ object LocalBook {
     ): List<Book> {
         val archiveFileDoc = FileDoc.fromUri(archiveFileUri, false)
         val files = ArchiveUtils.deCompress(archiveFileDoc, filter = filter)
-        if (files.isEmpty()) throw NoStackTraceException(appCtx.getString(R.string.unsupport_archivefile_entry))
+        if (files.isEmpty()) {
+            throw NoStackTraceException(appCtx.getString(R.string.unsupport_archivefile_entry))
+        }
         return files.map {
             saveBookFile(FileInputStream(it), saveFileName ?: it.name).let { uri ->
                 importFile(uri).apply {
@@ -276,7 +326,9 @@ object LocalBook {
                 errorCount += 1
             }
         }
-        if (errorCount == uris.size) throw NoStackTraceException("ImportFiles Error:\nAll input files occur error")
+        if (errorCount == uris.size) {
+            throw NoStackTraceException("ImportFiles Error:\nAll input files occur error")
+        }
     }
 
     /**
@@ -342,7 +394,7 @@ object LocalBook {
     /**
      * 下载在线的文件
      */
-    fun saveBookFile(
+    suspend fun saveBookFile(
         str: String,
         fileName: String,
         source: BaseSource? = null,
@@ -350,7 +402,11 @@ object LocalBook {
         AppConfig.defaultBookTreeUri
             ?: throw NoBooksDirException()
         val inputStream = when {
-            str.isAbsUrl() -> AnalyzeUrl(str, source = source).getInputStream()
+            str.isAbsUrl() -> AnalyzeUrl(
+                str, source = source, callTimeout = 0,
+                coroutineContext = coroutineContext
+            ).getInputStreamAwait()
+
             str.isDataUrl() -> ByteArrayInputStream(
                 Base64.decode(
                     str.substringAfter("base64,"),
@@ -363,6 +419,7 @@ object LocalBook {
         return saveBookFile(inputStream, fileName)
     }
 
+    @Throws(SecurityException::class)
     fun saveBookFile(
         inputStream: InputStream,
         fileName: String
@@ -383,12 +440,18 @@ object LocalBook {
                 }
                 doc.uri
             } else {
-                val treeFile = File(treeUri.path!!)
-                val file = treeFile.getFile(fileName)
-                FileOutputStream(file).use { oStream ->
-                    it.copyTo(oStream)
+                try {
+                    val treeFile = File(treeUri.path!!)
+                    val file = treeFile.getFile(fileName)
+                    FileOutputStream(file).use { oStream ->
+                        it.copyTo(oStream)
+                    }
+                    Uri.fromFile(file)
+                } catch (e: FileNotFoundException) {
+                    throw SecurityException("请重新设置书籍保存位置\nPermission Denial\n$e").apply {
+                        addSuppressed(e)
+                    }
                 }
-                Uri.fromFile(file)
             }
         }
     }

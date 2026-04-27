@@ -3,6 +3,7 @@ package io.legado.app.help.book
 import android.graphics.BitmapFactory
 import android.os.ParcelFileDescriptor
 import androidx.documentfile.provider.DocumentFile
+import com.script.rhino.runScriptWithContext
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.AppPattern
 import io.legado.app.constant.EventBus
@@ -31,6 +32,7 @@ import io.legado.app.utils.postEvent
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.sync.Mutex
@@ -96,6 +98,7 @@ object BookHelp {
             val bookFolderNames = hashSetOf<String>()
             val originNames = hashSetOf<String>()
             appDb.bookDao.all.forEach {
+                clearComicCache(it)
                 bookFolderNames.add(it.getFolderName())
                 if (it.isEpub) originNames.add(it.originName)
             }
@@ -116,6 +119,41 @@ object BookHelp {
             FileUtils.delete("$filesDir/shareBookSource.json")
             FileUtils.delete("$filesDir/shareRssSource.json")
             FileUtils.delete("$filesDir/books.json")
+        }
+    }
+
+    //清除已经看过的漫画数据
+    private fun clearComicCache(book: Book) {
+        //只处理漫画
+        //为0的时候，不清除已缓存数据
+        if (!book.isImage || AppConfig.imageRetainNum == 0) {
+            return
+        }
+        //向前保留设定数量，向后保留预下载数量
+        val startIndex = book.durChapterIndex - AppConfig.imageRetainNum
+        val endIndex = book.durChapterIndex + AppConfig.preDownloadNum
+        val chapterList = appDb.bookChapterDao.getChapterList(book.bookUrl, startIndex, endIndex)
+        val imgNames = hashSetOf<String>()
+        //获取需要保留章节的图片信息
+        chapterList.forEach {
+            val content = getContent(book, it)
+            if (content != null) {
+                val matcher = AppPattern.imgPattern.matcher(content)
+                while (matcher.find()) {
+                    val src = matcher.group(1) ?: continue
+                    val mSrc = NetworkUtils.getAbsoluteURL(it.url, src)
+                    imgNames.add("${MD5Utils.md5Encode16(mSrc)}.${getImageSuffix(mSrc)}")
+                }
+            }
+        }
+        downloadDir.getFile(
+            cacheFolderName,
+            book.getFolderName(),
+            cacheImageFolderName
+        ).listFiles()?.forEach { imgFile ->
+            if (!imgNames.contains(imgFile.name)) {
+                imgFile.delete()
+            }
         }
     }
 
@@ -149,8 +187,20 @@ object BookHelp {
             bookChapter.getFileName(),
         ).writeText(content)
         if (book.isOnLineTxt && AppConfig.tocCountWords) {
-            bookChapter.wordCount = StringUtils.wordCountFormat(content.length)
-            appDb.bookChapterDao.update(bookChapter)
+            val wordCount = StringUtils.wordCountFormat(content.length)
+            bookChapter.wordCount = wordCount
+            appDb.bookChapterDao.upWordCount(bookChapter.bookUrl, bookChapter.url, wordCount)
+        }
+    }
+
+    fun flowImages(bookChapter: BookChapter, content: String): Flow<String> {
+        return flow {
+            val matcher = AppPattern.imgPattern.matcher(content)
+            while (matcher.find()) {
+                val src = matcher.group(1) ?: continue
+                val mSrc = NetworkUtils.getAbsoluteURL(bookChapter.url, src)
+                emit(mSrc)
+            }
         }
     }
 
@@ -161,14 +211,7 @@ object BookHelp {
         content: String,
         concurrency: Int = AppConfig.threadCount
     ) = coroutineScope {
-        flow {
-            val matcher = AppPattern.imgPattern.matcher(content)
-            while (matcher.find()) {
-                val src = matcher.group(1) ?: continue
-                val mSrc = NetworkUtils.getAbsoluteURL(bookChapter.url, src)
-                emit(mSrc)
-            }
-        }.onEachParallel(concurrency) { mSrc ->
+        flowImages(bookChapter, content).onEachParallel(concurrency) { mSrc ->
             saveImage(bookSource, book, mSrc, bookChapter)
         }.collect()
     }
@@ -190,12 +233,16 @@ object BookHelp {
             if (isImageExist(book, src)) {
                 return
             }
-            val analyzeUrl = AnalyzeUrl(src, source = bookSource)
+            val analyzeUrl = AnalyzeUrl(
+                src, source = bookSource, coroutineContext = coroutineContext
+            )
             val bytes = analyzeUrl.getByteArrayAwait()
             //某些图片被加密，需要进一步解密
-            ImageUtils.decode(
-                src, bytes, isCover = false, bookSource, book
-            )?.let {
+            runScriptWithContext {
+                ImageUtils.decode(
+                    src, bytes, isCover = false, bookSource, book
+                )
+            }?.let {
                 if (!checkImage(it)) {
                     // 如果部分图片失效，每次进入正文都会花很长时间再次获取图片数据
                     // 所以无论如何都要将数据写入到文件里
@@ -292,8 +339,8 @@ object BookHelp {
      * 检测该章节是否下载
      */
     fun hasContent(book: Book, bookChapter: BookChapter): Boolean {
-        return if (book.isLocalTxt
-            || (bookChapter.isVolume && bookChapter.url.startsWith(bookChapter.title))
+        return if (book.isLocalTxt ||
+            (bookChapter.isVolume && bookChapter.url.startsWith(bookChapter.title))
         ) {
             true
         } else {
@@ -357,7 +404,11 @@ object BookHelp {
             bookChapter.getFileName()
         )
         if (file.exists()) {
-            return file.readText()
+            val string = file.readText()
+            if (string.isEmpty()) {
+                return null
+            }
+            return string
         }
         if (book.isLocal) {
             val string = LocalBook.getContent(book, bookChapter)
@@ -504,12 +555,16 @@ object BookHelp {
     }
 
     private val chapterNamePattern1 by lazy {
-        Pattern.compile(".*?第([\\d零〇一二两三四五六七八九十百千万壹贰叁肆伍陆柒捌玖拾佰仟]+)[章节篇回集话]")
+        Pattern.compile(
+            ".*?第([\\d零〇一二两三四五六七八九十百千万壹贰叁肆伍陆柒捌玖拾佰仟]+)[章节篇回集话]"
+        )
     }
 
     @Suppress("RegExpSimplifiable")
     private val chapterNamePattern2 by lazy {
-        Pattern.compile("^(?:[\\d零〇一二两三四五六七八九十百千万壹贰叁肆伍陆柒捌玖拾佰仟]+[,:、])*([\\d零〇一二两三四五六七八九十百千万壹贰叁肆伍陆柒捌玖拾佰仟]+)(?:[,:、]|\\.[^\\d])")
+        Pattern.compile(
+            "^(?:[\\d零〇一二两三四五六七八九十百千万壹贰叁肆伍陆柒捌玖拾佰仟]+[,:、])*([\\d零〇一二两三四五六七八九十百千万壹贰叁肆伍陆柒捌玖拾佰仟]+)(?:[,:、]|\\.[^\\d])"
+        )
     }
 
     private val regexA by lazy {

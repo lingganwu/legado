@@ -30,13 +30,11 @@ import io.legado.app.utils.ACache
 import io.legado.app.utils.GSON
 import io.legado.app.utils.isAbsUrl
 import io.legado.app.utils.launch
-import io.legado.app.utils.readText
 import io.legado.app.utils.sendToClip
 import io.legado.app.utils.setEdgeEffectColor
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.showHelp
 import io.legado.app.utils.splitNotBlank
-import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.flow.catch
@@ -54,19 +52,11 @@ class DictRuleActivity : VMBaseActivity<ActivityDictRuleBinding, DictRuleViewMod
     private val adapter by lazy { DictRuleAdapter(this, this) }
     private val qrCodeResult = registerForActivityResult(QrCodeResult()) {
         it ?: return@registerForActivityResult
-        showDialogFragment(
-            ImportDictRuleDialog(it)
-        )
+        showDialogFragment(ImportDictRuleDialog(it))
     }
     private val importDoc = registerForActivityResult(HandleFileContract()) {
-        kotlin.runCatching {
-            it.uri?.readText(this)?.let {
-                showDialogFragment(
-                    ImportDictRuleDialog(it)
-                )
-            }
-        }.onFailure {
-            toastOnUi("readTextError:${it.localizedMessage}")
+        it.uri?.let { uri ->
+            showDialogFragment(ImportDictRuleDialog(uri.toString()))
         }
     }
     private val exportResult = registerForActivityResult(HandleFileContract()) {
@@ -140,6 +130,7 @@ class DictRuleActivity : VMBaseActivity<ActivityDictRuleBinding, DictRuleViewMod
                 mode = HandleFileContract.FILE
                 allowExtensions = arrayOf("txt", "json")
             }
+
             R.id.menu_import_onLine -> showImportDialog()
             R.id.menu_import_qr -> qrCodeResult.launch()
             R.id.menu_import_default -> viewModel.importDefault()
@@ -150,8 +141,14 @@ class DictRuleActivity : VMBaseActivity<ActivityDictRuleBinding, DictRuleViewMod
 
     override fun onMenuItemClick(item: MenuItem): Boolean {
         when (item.itemId) {
-            R.id.menu_enable_selection -> viewModel.enableSelection(*adapter.selection.toTypedArray())
-            R.id.menu_disable_selection -> viewModel.disableSelection(*adapter.selection.toTypedArray())
+            R.id.menu_enable_selection -> {
+                viewModel.enableSelection(*adapter.selection.toTypedArray())
+            }
+
+            R.id.menu_disable_selection -> {
+                viewModel.disableSelection(*adapter.selection.toTypedArray())
+            }
+
             R.id.menu_export_selection -> exportResult.launch {
                 mode = HandleFileContract.EXPORT
                 fileData = HandleFileContract.FileData(
@@ -185,7 +182,13 @@ class DictRuleActivity : VMBaseActivity<ActivityDictRuleBinding, DictRuleViewMod
     }
 
     override fun delete(rule: DictRule) {
-        viewModel.delete(rule)
+        alert(R.string.draw) {
+            setMessage(getString(R.string.sure_del) + "\n" + rule.name)
+            noButton()
+            yesButton {
+                viewModel.delete(rule)
+            }
+        }
     }
 
     override fun edit(rule: DictRule) {
@@ -223,7 +226,7 @@ class DictRuleActivity : VMBaseActivity<ActivityDictRuleBinding, DictRuleViewMod
             okButton {
                 val text = alertBinding.editView.text?.toString()
                 text?.let {
-                    if (!cacheUrls.contains(it)) {
+                    if (it.isAbsUrl() && !cacheUrls.contains(it)) {
                         cacheUrls.add(0, it)
                         aCache.put(importRecordKey, cacheUrls.joinToString(","))
                     }

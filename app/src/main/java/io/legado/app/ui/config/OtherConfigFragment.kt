@@ -16,6 +16,7 @@ import io.legado.app.constant.EventBus
 import io.legado.app.constant.PreferKey
 import io.legado.app.databinding.DialogEditTextBinding
 import io.legado.app.help.AppFreezeMonitor
+import io.legado.app.help.DispatchersMonitor
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.lib.dialogs.alert
@@ -68,6 +69,7 @@ class OtherConfigFragment : PreferenceFragment(),
         }
         upPreferenceSummary(PreferKey.checkSource, CheckSource.summary)
         upPreferenceSummary(PreferKey.bitmapCacheSize, AppConfig.bitmapCacheSize.toString())
+        upPreferenceSummary(PreferKey.imageRetainNum, AppConfig.imageRetainNum.toString())
         upPreferenceSummary(PreferKey.sourceEditMaxLine, AppConfig.sourceEditMaxLine.toString())
     }
 
@@ -124,7 +126,7 @@ class OtherConfigFragment : PreferenceFragment(),
             PreferKey.bitmapCacheSize -> {
                 NumberPickerDialog(requireContext())
                     .setTitle(getString(R.string.bitmap_cache_size))
-                    .setMaxValue(2047)
+                    .setMaxValue(1024)
                     .setMinValue(1)
                     .setValue(AppConfig.bitmapCacheSize)
                     .show {
@@ -132,6 +134,14 @@ class OtherConfigFragment : PreferenceFragment(),
                         ImageProvider.bitmapLruCache.resize(ImageProvider.cacheSize)
                     }
             }
+            PreferKey.imageRetainNum -> NumberPickerDialog(requireContext())
+                .setTitle(getString(R.string.image_retain_number))
+                .setMaxValue(999)
+                .setMinValue(0)
+                .setValue(AppConfig.imageRetainNum)
+                .show {
+                    AppConfig.imageRetainNum = it
+                }
 
             PreferKey.sourceEditMaxLine -> {
                 NumberPickerDialog(requireContext())
@@ -180,6 +190,7 @@ class OtherConfigFragment : PreferenceFragment(),
                 LogUtils.logDeviceInfo()
                 LiveEventBus.config().enableLogger(AppConfig.recordLog)
                 AppFreezeMonitor.init(appCtx)
+                DispatchersMonitor.init()
             }
 
             PreferKey.processText -> sharedPreferences?.let {
@@ -203,6 +214,10 @@ class OtherConfigFragment : PreferenceFragment(),
                 upPreferenceSummary(key, AppConfig.bitmapCacheSize.toString())
             }
 
+            PreferKey.imageRetainNum -> {
+                upPreferenceSummary(key, AppConfig.imageRetainNum.toString())
+            }
+
             PreferKey.sourceEditMaxLine -> {
                 upPreferenceSummary(key, AppConfig.sourceEditMaxLine.toString())
             }
@@ -219,6 +234,8 @@ class OtherConfigFragment : PreferenceFragment(),
             PreferKey.webPort -> preference.summary = getString(R.string.web_port_summary, value)
             PreferKey.bitmapCacheSize -> preference.summary =
                 getString(R.string.bitmap_cache_size_summary, value)
+            PreferKey.imageRetainNum -> preference.summary =
+                getString(R.string.image_retain_number_summary, value)
 
             PreferKey.sourceEditMaxLine -> preference.summary =
                 getString(R.string.source_edit_max_line_summary, value)

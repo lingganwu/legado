@@ -81,7 +81,7 @@ class RssSourceAdapter(context: Context, val callBack: CallBack) :
             } else {
                 for (i in payloads.indices) {
                     val bundle = payloads[i] as Bundle
-                    bundle.keySet().map {
+                    bundle.keySet().forEach {
                         when (it) {
                             "upName" -> cbSource.text = item.getDisplayNameGroup()
                             "enabled" -> swtEnabled.isChecked = bundle.getBoolean("enabled")
@@ -95,28 +95,20 @@ class RssSourceAdapter(context: Context, val callBack: CallBack) :
 
     override fun registerListener(holder: ItemViewHolder, binding: ItemRssSourceBinding) {
         binding.apply {
-            swtEnabled.setOnCheckedChangeListener { view, checked ->
-                if (view.isPressed) {
-                    getItem(holder.layoutPosition)?.let {
-                        if (view.isPressed) {
-                            it.enabled = checked
-                            callBack.update(it)
-                        }
-                    }
+            swtEnabled.setOnUserCheckedChangeListener { checked ->
+                getItem(holder.layoutPosition)?.let {
+                    it.enabled = checked
+                    callBack.update(it)
                 }
             }
-            cbSource.setOnCheckedChangeListener { view, checked ->
-                if (view.isPressed) {
-                    getItem(holder.layoutPosition)?.let {
-                        if (view.isPressed) {
-                            if (checked) {
-                                selected.add(it)
-                            } else {
-                                selected.remove(it)
-                            }
-                            callBack.upCountView()
-                        }
+            cbSource.setOnUserCheckedChangeListener { checked ->
+                getItem(holder.layoutPosition)?.let {
+                    if (checked) {
+                        selected.add(it)
+                    } else {
+                        selected.remove(it)
                     }
+                    callBack.upCountView()
                 }
             }
             ivEdit.setOnClickListener {

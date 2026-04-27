@@ -24,6 +24,11 @@
     <string name="dialog_setting">去设置</string>
     <string name="tip_cannot_jump_setting_page">无法跳转至设置界面</string>
 
+    <string name="manual_input">手动输入</string>
+    <string name="enter_directory_path">请输入目录路径</string>
+    <string name="invalid_directory">目录路径无效</string>
+    <string name="empty_directory_input">目录路径不能为空</string>
+
     <string name="dynamic_click_retry">点击重试</string>
     <string name="dynamic_loading">正在加载</string>
     <string name="draw">提醒</string>
@@ -379,6 +384,7 @@
     <string name="page_anim_simulation">仿真</string>
     <string name="page_anim_scroll">滚动</string>
     <string name="page_anim_none">无动画</string>
+    <string name="disable_manga_page_anim">禁用翻页动画</string>
     <string name="up_change_source_last_chapter_t">后台更新换源最新章节</string>
     <string name="up_change_source_last_chapter_s">开启则会在软件打开 1 分钟后开始更新</string>
     <string name="behavior_main_t">书架工具栏自动隐藏</string>
@@ -604,7 +610,7 @@
     <string name="rss_source">订阅源</string>
     <string name="rss_source_edit">编辑订阅源</string>
     <string name="screen">筛选</string>
-    <string name="screen_find">筛选发现</string>
+    <string name="screen_find">筛选发现源</string>
     <string name="dur_pos">当前位置：</string>
     <string name="precision_search">精准搜索</string>
     <string name="service_starting">正在启动服务</string>
@@ -821,12 +827,13 @@
     <string name="sync_book_progress_t">同步阅读进度</string>
     <string name="sync_book_progress_s">进入退出阅读界面时同步阅读进度</string>
     <string name="sync_book_progress_plus_t">同步增强</string>
-    <string name="sync_book_progress_plus_s">重新进入页面（息屏、后台返回等）或者网络变为可用时同步云端进度</string>
+    <string name="sync_book_progress_plus_s">重新进入页面（息屏、后台返回等）或者网络变为可用时同步云端进度，同步新进度会询问</string>
     <string name="create_bookmark_error">创建书签失败</string>
     <string name="single_url">单 URL</string>
     <string name="export_bookshelf">导出书单</string>
     <string name="import_bookshelf">导入书单</string>
     <string name="pre_download">预下载</string>
+    <string name="pre_download_m">预下载%s页</string>
     <string name="pre_download_s">预先下载 %s 章正文</string>
     <string name="is_enabled">是否启用</string>
     <string name="background_image">背景图片</string>
@@ -1006,6 +1013,8 @@
     <string name="add_remote_book">远程书籍</string>
     <string name="bitmap_cache_size_summary">当前最大缓存 %1$s MB</string>
     <string name="bitmap_cache_size">图片绘制缓存</string>
+    <string name="image_retain_number_summary">保留已读章节数量 %s</string>
+    <string name="image_retain_number">漫画保留数量</string>
     <string name="export_pics_file">TXT 导出图片</string>
     <!-- string end -->
     <string name="error_decode_bitmap">图片解码失败</string>
@@ -1130,11 +1139,13 @@
     <string name="exit_app">退出软件</string>
     <string name="result_analyzed">解析示例</string>
     <string name="bookshelf_px_4">综合排序</string>
+    <string name="bookshelf_px_5">按作者</string>
     <string name="effective_replaces">起效的替换</string>
     <string name="export_book">导出书籍</string>
     <string name="export_book_notification_content">正在导出(%1$s),还有%2$d本待导出</string>
     <string name="export_md">导出(MD)</string>
     <string name="change_source_delay">换源间隔</string>
+    <string name="change_source_progress">结果 %1$d, 当前进度 %2$d / %3$d: %4$s</string>
     <string name="open_book_info_by_click_title">点击书名打开详情</string>
     <string name="export_wait">等待导出</string>
     <string name="sync_book_progress_success">进度同步成功</string>
@@ -1177,6 +1188,47 @@
     <string name="read_aloud_read_phone_state_permission_rationale">阅读需要读取手机状态实现来电期间暂停朗读功能</string>
     <string name="read_aloud_by_media_button_title">耳机按键启动朗读</string>
     <string name="read_aloud_by_media_button_summary">通过耳机按键来启动朗读</string>
-    <string name="show_same_source">显示重复书源</string>
+    <string name="group_sources_by_domain">按域名分组显示</string>
     <string name="theme_config">主题配置</string>
+    <string name="show_manga_ui">漫画浏览</string>
+    <string name="disable_manga_scale">禁用漫画缩放</string>
+    <string name="disable_manga_click_scroll">禁用点击翻页</string>
+    <string name="enable_auto_page_scroll">开启自动翻页</string>
+    <string name="manga_auto_page_speed">翻页速度 %s</string>
+    <string name="enable_auto_scroll">开启滚动</string>
+    <string name="manga_footer_config">页脚配置</string>
+    <string name="setting_manga_auto_page_speed">设置自动翻页速度</string>
+    <string name="book_reader_info_bar">页数. %1$d/%2$d  章节. %3$d/%4$d -> %5$s%%</string>
+    <string name="menu_download_after">下载之后章节</string>
+    <string name="menu_download_all">下载全部章节</string>
+    <string name="manga_header_chapter">《章节和文案》隐藏</string>
+    <string name="manga_check_chapter_label">《章节.》文案</string>
+    <string name="manga_check_chapter">章节</string>
+    <string name="manga_check_chapter_name">章节名称</string>
+    <string name="manga_header_page">《页数和文案》隐藏</string>
+    <string name="manga_check_page_label">《页数.》文案</string>
+    <string name="manga_check_page_number">页数</string>
+    <string name="manga_header_progress">《总进度和文案》隐藏</string>
+    <string name="manga_check_progress_label">《总进度.》文案</string>
+    <string name="manga_check_progress">总进度</string>
+    <string name="manga_header_footer">页脚</string>
+    <string name="manga_radio_left">靠左</string>
+    <string name="manga_radio_center">居中</string>
+    <string name="enable_manga_horizontal_scroll">水平滚动</string>
+    <string name="manga_color_filter">滤镜</string>
+    <string name="hide_manga_title">隐藏漫画列表标题</string>
+    <string name="refresh_explore">刷新发现</string>
+    <string name="padding_display_cutouts">填充刘海区域</string>
+    <string name="system_media_control_compatibility_change">系统媒体控件兼容性更改</string>
+    <string name="system_media_control_compatibility_change_summary">当锁屏不显示系统媒体控件时可以尝试开启，比如oneui7.0或vivo等</string>
+    <string name="read_aloud_pause_resume">朗读暂停/继续</string>
+    <string name="manga_epaper">墨水屏</string>
+    <string name="manga_epaper_stting">墨水屏设置</string>
+    <string name="manga_epaper_value">阈值</string>
+    <string name="disable_horizontal_page_snap">禁用水平翻页效果</string>
+    <string name="enable_manga_gray">开启图片灰色</string>
+    <string name="sure_cache_book">是否确认开始缓存？</string>
+    <string name="auto_check_new_backup_t">自动检查新备份</string>
+    <string name="auto_check_new_backup_s">打开软件时检查是否有新备份，有新备份时提示是否更新</string>
+    <string name="sys_image_picker">系统图片选择器</string>
 </resources>

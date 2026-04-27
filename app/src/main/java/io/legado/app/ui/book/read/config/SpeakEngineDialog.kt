@@ -66,7 +66,7 @@ class SpeakEngineDialog() : BaseDialogFragment(R.layout.dialog_recycler_view),
     private val callBack: CallBack? get() = parentFragment as? CallBack
     private val importDocResult = registerForActivityResult(HandleFileContract()) {
         it.uri?.let { uri ->
-            viewModel.importLocal(uri)
+            showDialogFragment(ImportHttpTtsDialog(uri.toString()))
         }
     }
     private val exportDirResult = registerForActivityResult(HandleFileContract()) {
@@ -216,7 +216,7 @@ class SpeakEngineDialog() : BaseDialogFragment(R.layout.dialog_recycler_view),
             customView { alertBinding.root }
             okButton {
                 alertBinding.editView.text?.toString()?.let { url ->
-                    if (!cacheUrls.contains(url)) {
+                    if (url.isAbsUrl() && !cacheUrls.contains(url)) {
                         cacheUrls.add(0, url)
                         aCache.put(ttsUrlKey, cacheUrls.joinToString(","))
                     }
