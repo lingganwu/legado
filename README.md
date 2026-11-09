@@ -1,110 +1,103 @@
-# [English](English.md) [中文](README.md)
+# 灵阅（LingGan Reader）
 
-[![icon_android](https://github.com/gedoor/gedoor.github.io/blob/master/static/img/legado/icon_android.png)](https://play.google.com/store/apps/details?id=io.legado.play.release)
-<a href="https://jb.gg/OpenSourceSupport" target="_blank">
-<img width="24" height="24" src="https://resources.jetbrains.com/storage/products/company/brand/logos/jb_beam.svg?_gl=1*135yekd*_ga*OTY4Mjg4NDYzLjE2Mzk0NTE3MzQ.*_ga_9J976DJZ68*MTY2OTE2MzM5Ny4xMy4wLjE2NjkxNjMzOTcuNjAuMC4w&_ga=2.257292110.451256242.1669085120-968288463.1639451734" alt="idea"/>
-</a>
+> 基于 Legado / 阅读 3.0 的个人定制 Android 阅读器。
 
-<div align="center">
-<img width="125" height="125" src="https://github.com/gedoor/legado/raw/master/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png" alt="legado"/>  
-  
-Legado / 开源阅读
-<br>
-<a href="https://gedoor.github.io" target="_blank">gedoor.github.io</a> / <a href="https://www.legado.top/" target="_blank">legado.top</a>
-<br>
-Legado is a free and open source novel reader for Android.
-</div>
+灵阅在保留 Legado 成熟阅读能力的基础上，重点增强**书籍元数据智能整理**以及后续的**个人云端同步**体验。项目会尽量减少对上游核心阅读逻辑的侵入，方便长期维护和跟随上游更新。
 
-[![](https://img.shields.io/badge/-Contents:-696969.svg)](#contents) [![](https://img.shields.io/badge/-Function-F5F5F5.svg)](#Function-主要功能-) [![](https://img.shields.io/badge/-Community-F5F5F5.svg)](#Community-交流社区-) [![](https://img.shields.io/badge/-API-F5F5F5.svg)](#API-) [![](https://img.shields.io/badge/-Other-F5F5F5.svg)](#Other-其他-) [![](https://img.shields.io/badge/-Grateful-F5F5F5.svg)](#Grateful-感谢-) [![](https://img.shields.io/badge/-Interface-F5F5F5.svg)](#Interface-界面-)
+> [!IMPORTANT]
+> 本项目是个人定制 Fork，并非 Legado 官方发行版。感谢 Legado / 阅读 3.0 项目及所有贡献者。
 
->新用户？
->
->软件不提供内容，需要您自己手动添加，例如导入书源等。
->看看 [官方帮助文档](https://www.yuque.com/legado/wiki)，也许里面就有你要的答案。
+## 项目定位
 
-# Function-主要功能 [![](https://img.shields.io/badge/-Function-F5F5F5.svg)](#Function-主要功能-)
-[English](English.md)
+灵阅不是一个自带内容的小说平台。软件本身不提供小说内容，用户需要自行导入本地书籍或配置合法可用的内容来源。
 
-<details><summary>中文</summary>
-1.自定义书源，自己设置规则，抓取网页数据，规则简单易懂，软件内有规则说明。<br>
-2.列表书架，网格书架自由切换。<br>
-3.书源规则支持搜索及发现，所有找书看书功能全部自定义，找书更方便。<br>
-4.订阅内容,可以订阅想看的任何内容,看你想看<br>
-5.支持替换净化，去除广告替换内容很方便。<br>
-6.支持本地TXT、EPUB阅读，手动浏览，智能扫描。<br>
-7.支持高度自定义阅读界面，切换字体、颜色、背景、行距、段距、加粗、简繁转换等。<br>
-8.支持多种翻页模式，覆盖、仿真、滑动、滚动等。<br>
-9.软件开源，持续优化，无广告。
-</details>
+在 Legado 原有功能之上，本项目计划重点完善：
 
-<a href="#readme">
-    <img src="https://img.shields.io/badge/-返回顶部-orange.svg" alt="#" align="right">
-</a>
+- **智能完善书籍信息**：根据已有书名、作者等线索检索候选资料，补充标准书名、作者、封面、简介、分类/标签及来源信息。
+- **AI 辅助匹配**：AI 主要用于候选资料标准化、去重和匹配，不把模型生成内容作为书籍事实信息的唯一来源。
+- **批量整理书架**：扫描书架中缺失封面、作者或简介的书籍，提供候选结果及修改预览。
+- **天翼云盘同步**：后续增加个人备份以及多设备阅读进度同步，完整备份和阅读进度采用独立同步策略。
+- **自动构建**：继续使用 GitHub Actions 完成 Android APK 的测试与构建。
 
-# Community-交流社区 [![](https://img.shields.io/badge/-Community-F5F5F5.svg)](#Community-交流社区-)
+详细路线见 [灵阅开发计划](docs/LINGGAN_READER_PLAN.md)。
 
-#### Telegram
-[![Telegram-group](https://img.shields.io/badge/Telegram-%E7%BE%A4%E7%BB%84-blue)](https://t.me/yueduguanfang) [![Telegram-channel](https://img.shields.io/badge/Telegram-%E9%A2%91%E9%81%93-blue)](https://t.me/legado_channels)
+## 核心功能
 
-#### Discord
-[![Discord](https://img.shields.io/discord/560731361414086666?color=%235865f2&label=Discord)](https://discord.gg/VtUfRyzRXn)
+### Legado 原有能力
 
-#### Other
-https://www.yuque.com/legado/wiki/community
+- 自定义书源及规则。
+- 列表、网格书架。
+- 搜索与发现。
+- 订阅内容。
+- 内容替换与净化。
+- 本地 TXT、EPUB 阅读、手动浏览与智能扫描。
+- 阅读界面自定义，包括字体、颜色、背景、行距、段距、加粗及简繁转换等。
+- 多种翻页方式。
 
-<a href="#readme">
-    <img src="https://img.shields.io/badge/-返回顶部-orange.svg" alt="#" align="right">
-</a>
+### 灵阅增强功能
 
-# API [![](https://img.shields.io/badge/-API-F5F5F5.svg)](#API-)
-* 阅读3.0 提供了2种方式的API：`Web方式`和`Content Provider方式`。您可以在[这里](api.md)根据需要自行调用。 
-* 可通过url唤起阅读进行一键导入,url格式: legado://import/{path}?src={url}
-* path类型: bookSource,rssSource,replaceRule,textTocRule,httpTTS,theme,readConfig,dictRule,[addToBookshelf](/app/src/main/java/io/legado/app/ui/association/AddToBookshelfDialog.kt)
-* path类型解释: 书源,订阅源,替换规则,本地txt小说目录规则,在线朗读引擎,主题,阅读排版,添加到书架
+当前开发路线以书籍元数据为第一优先级：
 
-<a href="#readme">
-    <img src="https://img.shields.io/badge/-返回顶部-orange.svg" alt="#" align="right">
-</a>
+```text
+本地或书架中的书籍
+        ↓
+提取已有书名 / 作者等线索
+        ↓
+联网检索候选资料
+        ↓
+标准化、去重、AI 辅助匹配
+        ↓
+展示封面 / 书名 / 作者 / 简介等候选信息
+        ↓
+用户确认
+        ↓
+更新书籍资料
+```
 
-# Other-其他 [![](https://img.shields.io/badge/-Other-F5F5F5.svg)](#Other-其他-)
-##### 免责声明
-https://gedoor.github.io/Disclaimer
+设计原则：
 
-##### 阅读3.0
-* [书源规则](https://mgz0227.github.io/The-tutorial-of-Legado/)
-* [更新日志](/app/src/main/assets/updateLog.md)
-* [帮助文档](/app/src/main/assets/web/help/md/appHelp.md)
-* [web端书架](https://github.com/gedoor/legado_web_bookshelf)
-* [web端源编辑](https://github.com/gedoor/legado_web_source_editor)
+1. **来源优先**：封面、作者和简介等事实信息应有可追溯的候选来源。
+2. **AI 不凭空补全事实**：模型主要承担匹配和整理工作。
+3. **覆盖前确认**：低置信度或可能覆盖已有资料时，由用户确认。
+4. **隐私优先**：AI API Key、云盘凭据等敏感信息不得写入仓库或普通明文备份。
 
-<a href="#readme">
-    <img src="https://img.shields.io/badge/-返回顶部-orange.svg" alt="#" align="right">
-</a>
+## 开发路线
 
-# Grateful-感谢 [![](https://img.shields.io/badge/-Grateful-F5F5F5.svg)](#Grateful-感谢-)
-> * org.jsoup:jsoup
-> * cn.wanghaomiao:JsoupXpath
-> * com.jayway.jsonpath:json-path
-> * com.github.gedoor:rhino-android
-> * com.squareup.okhttp3:okhttp
-> * com.github.bumptech.glide:glide
-> * org.nanohttpd:nanohttpd
-> * org.nanohttpd:nanohttpd-websocket
-> * cn.bingoogolapple:bga-qrcode-zxing
-> * com.jaredrummler:colorpicker
-> * org.apache.commons:commons-text
-> * io.noties.markwon:core
-> * io.noties.markwon:image-glide
-> * com.hankcs:hanlp
-> * com.positiondev.epublib:epublib-core
-<a href="#readme">
-    <img src="https://img.shields.io/badge/-返回顶部-orange.svg" alt="#" align="right">
-</a>
+- [x] 建立独立开发分支与项目计划。
+- [ ] 确认现有 Android / GitHub Actions 构建基线。
+- [ ] 单本书籍智能完善信息。
+- [ ] AI 候选匹配与配置。
+- [ ] 书架批量整理与差异预览。
+- [ ] 天翼云盘个人备份。
+- [ ] 多设备阅读进度同步与冲突处理。
 
-# Interface-界面 [![](https://img.shields.io/badge/-Interface-F5F5F5.svg)](#Interface-界面-)
-<img src="https://github.com/gedoor/gedoor.github.io/blob/master/static/img/legado/%E9%98%85%E8%AF%BB%E7%AE%80%E4%BB%8B1.jpg" width="270"><img src="https://github.com/gedoor/gedoor.github.io/blob/master/static/img/legado/%E9%98%85%E8%AF%BB%E7%AE%80%E4%BB%8B2.jpg" width="270"><img src="https://github.com/gedoor/gedoor.github.io/blob/master/static/img/legado/%E9%98%85%E8%AF%BB%E7%AE%80%E4%BB%8B3.jpg" width="270">
-<img src="https://github.com/gedoor/gedoor.github.io/blob/master/static/img/legado/%E9%98%85%E8%AF%BB%E7%AE%80%E4%BB%8B4.jpg" width="270"><img src="https://github.com/gedoor/gedoor.github.io/blob/master/static/img/legado/%E9%98%85%E8%AF%BB%E7%AE%80%E4%BB%8B5.jpg" width="270"><img src="https://github.com/gedoor/gedoor.github.io/blob/master/static/img/legado/%E9%98%85%E8%AF%BB%E7%AE%80%E4%BB%8B6.jpg" width="270">
+> 路线中的未完成项目表示计划目标，不代表当前版本已经提供该功能。
 
-<a href="#readme">
-    <img src="https://img.shields.io/badge/-返回顶部-orange.svg" alt="#" align="right">
-</a>
+## 构建
+
+本仓库保留 Gradle Wrapper 与 GitHub Actions 工作流。具体构建、签名及发布方式会随着定制版本开发逐步整理，避免在功能尚未完成时提供可能失效的安装说明。
+
+## API
+
+阅读 3.0 原项目提供 Web 和 Content Provider 两种 API，并支持使用 URL Scheme 导入部分配置。现有接口说明见 [api.md](api.md)。
+
+## 上游项目与致谢
+
+本项目基于 **Legado / 阅读 3.0** 开发：
+
+- Upstream: https://<scrubbed-url-domain>/gedoor/legado
+- Website: https://<scrubbed-url-domain>
+- Documentation: https://<scrubbed-url-domain>/legado/wiki
+
+感谢 Legado 原作者、维护者和社区贡献者，以及项目使用的各开源依赖。
+
+## 免责声明
+
+本项目只提供阅读工具及个人定制功能，不提供小说内容。用户应自行确保导入、访问及使用的内容来源符合适用法律法规和相关服务条款。
+
+Legado 原项目免责声明：
+https://<scrubbed-url-domain>/Disclaimer
+
+## 开源许可
+
+本项目继承 Legado 的开源许可要求，继续保留仓库中的 [GPL-3.0 LICENSE](LICENSE) 以及原项目的版权与致谢信息。
