@@ -11,6 +11,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.coroutineScope
+import io.legado.app.utils.mapParallelSafe
 
 /**
  * AI 书籍元数据辅助类
@@ -25,47 +27,45 @@ object AiBookMetadataHelp {
         name: String,
         author: String,
         scope: CoroutineScope
-    ): List<MetadataCandidate> {
+    ): List<MetadataCandidate> = coroutineScope {
         val searchKey = if (name.isNotEmpty()) name else author
-        if (searchKey.isBlank()) return emptyList()
+        if (searchKey.isBlank()) return@coroutineScope emptyList()
 
         val sourceParts = withContext(Dispatchers.IO) {
             appDb.bookSourceDao.allEnabledPart
         }
-        if (sourceParts.isEmpty()) return emptyList()
+        if (sourceParts.isEmpty()) return@coroutineScope emptyList()
 
-        return scope.launch {
-            val allResults: List<SearchBook> = sourceParts.mapParallelSafe(AppConfig.threadCount) { part ->
-                part.getBookSource()?.let { source ->
-                    try {
-                        WebBook.searchBookAwait(source, searchKey, 1)
-                    } catch (e: Exception) {
-                        emptyArrayList<SearchBook>()
-                    }
-                } ?: emptyArrayList<SearchBook>()
-            }.flatten()
+        val allResults: List<SearchBook> = sourceParts.mapParallelSafe(AppConfig.threadCount) { part ->
+            part.getBookSource()?.let { source ->
+                try {
+                    WebBook.searchBookAwait(source, searchKey, 1)
+                } catch (e: Exception) {
+                    emptyArrayList<SearchBook>()
+                }
+            } ?: emptyArrayList<SearchBook>()
+        }.flatten()
 
-            // 去重：同名同作者只保留第一个来源
-            val seen = hashSetOf<String>()
-            val unique = allResults.filter { sb ->
-                val key = "${sb.name}|${sb.author}"
-                seen.add(key)
-            }
+        // 去重：同名同作者只保留第一个来源
+        val seen = hashSetOf<String>()
+        val unique = allResults.filter { sb ->
+            val key = "${sb.name}|${sb.author}"
+            seen.add(key)
+        }
 
-            unique.map { sb ->
-                MetadataCandidate(
-                    name = sb.name,
-                    author = sb.author,
-                    kind = sb.kind,
-                    intro = sb.intro,
-                    coverUrl = sb.coverUrl,
-                    authorIntro = null,
-                    sourceName = sb.originName,
-                    sourceUrl = sb.bookUrl,
-                    confidence = 1.0f
-                )
-            }
-        }.join()
+        unique.map { sb ->
+            MetadataCandidate(
+                name = sb.name,
+                author = sb.author,
+                kind = sb.kind,
+                intro = sb.intro,
+                coverUrl = sb.coverUrl,
+                authorIntro = null,
+                sourceName = sb.originName,
+                sourceUrl = sb.bookUrl,
+                confidence = 1.0f
+            )
+        }
     }
 
     /**
