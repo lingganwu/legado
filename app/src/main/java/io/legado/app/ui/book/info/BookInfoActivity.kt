@@ -767,7 +767,8 @@ class BookInfoActivity :
             try {
                 val candidates = AiBookMetadataHelp.searchCandidates(
                     book.name,
-                    book.author
+                    book.author,
+                    lifecycleScope
                 )
                 if (candidates.isEmpty()) {
                     upLoading(false)

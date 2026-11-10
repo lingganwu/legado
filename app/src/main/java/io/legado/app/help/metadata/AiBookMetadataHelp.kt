@@ -1,12 +1,11 @@
 package io.legado.app.help.metadata
 
-import android.content.Context
+import io.legado.app.data.appDb
 import io.legado.app.data.entities.AiBookMetadata
 import io.legado.app.data.entities.SearchBook
 import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.help.config.AppConfig
 import io.legado.app.model.webBook.WebBook
-import io.legado.app.utils.APP
 import io.legado.app.data.entities.Book
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -25,18 +24,18 @@ object AiBookMetadataHelp {
     suspend fun searchCandidates(
         name: String,
         author: String,
-        scope: CoroutineScope = Dispatchers.IO
+        scope: CoroutineScope
     ): List<MetadataCandidate> {
         val searchKey = if (name.isNotEmpty()) name else author
         if (searchKey.isBlank()) return emptyList()
 
         val sourceParts = withContext(Dispatchers.IO) {
-            APP.getDatabase().bookSourceDao.allEnabledPart
+            appDb.bookSourceDao.allEnabledPart
         }
         if (sourceParts.isEmpty()) return emptyList()
 
         return scope.launch {
-            val allResults = sourceParts.mapParallelSafe(AppConfig.threadCount) { part ->
+            val allResults: List<SearchBook> = sourceParts.mapParallelSafe(AppConfig.threadCount) { part ->
                 part.getBookSource()?.let { source ->
                     try {
                         WebBook.searchBookAwait(source, searchKey, 1)
@@ -123,7 +122,7 @@ object AiBookMetadataHelp {
                 }
             }
             // 保存到数据库
-            APP.getDatabase().bookDao.updateBook(updated)
+            appDb.bookDao.updateBook(updated)
             // 记录 AI 匹配结果
             val meta = AiBookMetadata(
                 bookUrl = book.bookUrl,
@@ -132,7 +131,7 @@ object AiBookMetadataHelp {
                 summary = candidate.intro,
                 authorIntro = candidate.authorIntro
             )
-            APP.getDatabase().aiBookMetadataDao.insert(meta)
+            appDb.aiBookMetadataDao.insert(meta)
             onSuccess(updated)
         } catch (e: Exception) {
             onError(e)
