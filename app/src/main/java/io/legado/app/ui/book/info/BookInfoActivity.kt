@@ -786,8 +786,8 @@ class BookInfoActivity :
                 selector(
                     getString(R.string.organize_metadata),
                     displayItems
-                ) { _, selected, _ ->
-                    val chosen = scored[selected].candidate
+                ) { _, position ->
+                    val chosen = scored[position].candidate
                     showDiffAndConfirm(book, chosen)
                 }
             } catch (e: Exception) {
@@ -815,9 +815,9 @@ class BookInfoActivity :
         }
 
         alert(getString(R.string.organize_metadata)) {
-            title("确认应用以下变更？")
-            message(diffs.joinToString("\n"))
-            positiveButton(R.string.ok) {
+            setTitle("确认应用以下变更？")
+            setMessage(diffs.joinToString("\n"))
+            okButton {
                 lifecycleScope.launch {
                     AiBookMetadataHelp.applyMetadata(
                         book,
@@ -838,7 +838,7 @@ class BookInfoActivity :
                     )
                 }
             }
-            negativeButton(R.string.cancel) {}
+            cancelButton()
         }
     }
 
