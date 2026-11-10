@@ -34,6 +34,8 @@ import io.legado.app.help.book.removeType
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
 import io.legado.app.help.metadata.AiBookMetadataHelp
+import io.legado.app.help.metadata.MetadataCandidate
+import io.legado.app.help.metadata.ScoredCandidate
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.dialogs.selector
 import io.legado.app.lib.theme.accentColor

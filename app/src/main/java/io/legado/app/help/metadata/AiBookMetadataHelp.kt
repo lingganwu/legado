@@ -7,12 +7,16 @@ import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.help.config.AppConfig
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.data.entities.Book
+import io.legado.app.utils.AppLog
+import io.legado.app.utils.mapParallelSafe
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.mapParallelSafe
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.coroutineScope
-import io.legado.app.utils.mapParallelSafe
 
 /**
  * AI 书籍元数据辅助类
@@ -25,8 +29,7 @@ object AiBookMetadataHelp {
      */
     suspend fun searchCandidates(
         name: String,
-        author: String,
-        scope: CoroutineScope
+        author: String
     ): List<MetadataCandidate> = coroutineScope {
         val searchKey = if (name.isNotEmpty()) name else author
         if (searchKey.isBlank()) return@coroutineScope emptyList()
@@ -36,15 +39,18 @@ object AiBookMetadataHelp {
         }
         if (sourceParts.isEmpty()) return@coroutineScope emptyList()
 
-        val allResults: List<SearchBook> = sourceParts.mapParallelSafe(AppConfig.threadCount) { part ->
-            part.getBookSource()?.let { source ->
-                try {
-                    WebBook.searchBookAwait(source, searchKey, 1)
-                } catch (e: Exception) {
-                    emptyArrayList<SearchBook>()
-                }
-            } ?: emptyArrayList<SearchBook>()
-        }.flatten()
+        val allResults: List<SearchBook> = flow {
+            for (bs in sourceParts) {
+                bs.getBookSource()?.let { emit(it) }
+            }
+        }.mapParallelSafe(AppConfig.threadCount) { source ->
+            try {
+                WebBook.searchBookAwait(source, searchKey, 1)
+            } catch (e: Exception) {
+                AppLog.put("AI元数据搜索出错: ${e.message}", e)
+                emptyList<SearchBook>()
+            }
+        }.toList().flatten()
 
         // 去重：同名同作者只保留第一个来源
         val seen = hashSetOf<String>()
@@ -76,14 +82,14 @@ object AiBookMetadataHelp {
         target: Book,
         candidates: List<MetadataCandidate>
     ): List<ScoredCandidate> = candidates.map { candidate ->
-        val nameScore = similarity(target.name, candidate.name) * 100
-        val authorScore = similarity(target.author, candidate.author) * 50
+        val nameScore = (similarity(target.name, candidate.name) * 100).toInt()
+        val authorScore = (similarity(target.author, candidate.author) * 50).toInt()
         val coverScore = if (candidate.coverUrl?.isNotEmpty() == true) 20 else 0
         val introScore = if (candidate.intro?.isNotEmpty() == true) 15 else 0
         val kindScore = if (candidate.kind?.isNotEmpty() == true) 15 else 0
 
         val total = nameScore + authorScore + coverScore + introScore + kindScore
-        ScoredCandidate(candidate, total.coerceIn(0, 100))
+        ScoredCandidate(candidate, total.coerceIn(0, 100).toFloat())
     }.sortedByDescending { it.score }
 
     private fun similarity(a: String?, b: String?): Float {
