@@ -28,7 +28,11 @@ import io.legado.app.help.book.contains
 import io.legado.app.help.book.isLocal
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
+import io.legado.app.help.metadata.AiBookMetadataHelp
+import io.legado.app.help.metadata.MetadataCandidate
+import io.legado.app.help.metadata.ScoredCandidate
 import io.legado.app.lib.dialogs.alert
+import io.legado.app.lib.dialogs.selector
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.ui.book.group.GroupManageDialog
@@ -325,6 +329,7 @@ class BookshelfManageActivity :
             R.id.menu_change_source -> showDialogFragment<SourcePickerDialog>()
             R.id.menu_clear_cache -> viewModel.clearCache(adapter.selection)
             R.id.menu_check_selected_interval -> adapter.checkSelectedInterval()
+            R.id.menu_batch_organize -> batchOrganizeBooks(adapter.selection)
         }
         return false
     }
@@ -431,4 +436,81 @@ class BookshelfManageActivity :
         viewModel.batchChangeSourceState.value = true
     }
 
+    /**
+     * 批量整理选中书籍的元数据
+     * 1. 逐本检索候选
+     * 2. 只补全缺失字段
+     * 3. 展示差异预览
+     * 4. 用户确认后一次性写入
+     */
+    private fun batchOrganizeBooks(books: Set<Book>) {
+        if (books.isEmpty()) {
+            toastOnUi("未找到书籍")
+            return
+        }
+        waitDialog.setText(R.string.organize_metadata)
+        waitDialog.show()
+        lifecycleScope.launch {
+            val results = AiBookMetadataHelp.searchBatchCandidates(books)
+            if (results.isEmpty()) {
+                waitDialog.dismiss()
+                toastOnUi("未找到候选信息")
+                return@launch
+            }
+            val items = results.mapIndexed { idx, (book, candidate) ->
+                "${idx + 1}. ${book.name} -> ${candidate.name} / ${candidate.author}"
+            }
+            selector(
+                title = "批量整理结果",
+                items = items
+            ) { dialog, position ->
+                val (book, candidate) = results[position]
+                showBatchDiffAndConfirm(book, candidate)
+                dialog.dismiss()
+            }
+            waitDialog.dismiss()
+        }
+    }
+
+    private fun showBatchDiffAndConfirm(book: Book, candidate: MetadataCandidate) {
+        val diffs = mutableListOf<String>()
+        if (book.customCoverUrl.isNullOrEmpty() && candidate.coverUrl?.isNotEmpty() == true) {
+            diffs.add("封面: (空) -> ${candidate.coverUrl}")
+        }
+        if (book.customIntro.isNullOrEmpty() && candidate.intro?.isNotEmpty() == true) {
+            diffs.add("简介: (空) -> ${candidate.intro?.take(50)}...")
+        }
+        if (book.customTag.isNullOrEmpty() && candidate.kind?.isNotEmpty() == true) {
+            diffs.add("分类: (空) -> ${candidate.kind}")
+        }
+
+        if (diffs.isEmpty()) {
+            toastOnUi("无需更新的字段")
+            return
+        }
+
+        alert(title = "确认应用以下变更？") {
+            setMessage(diffs.joinToString("\n"))
+            okButton {
+                lifecycleScope.launch {
+                    AiBookMetadataHelp.applyMetadata(
+                        book,
+                        candidate,
+                        onSuccess = { updated ->
+                            runOnUiThread {
+                                viewModel.saveBook(updated)
+                                toastOnUi("已应用元数据")
+                            }
+                        },
+                        onError = { e ->
+                            runOnUiThread {
+                                toastOnUi("应用失败: ${e.message}")
+                            }
+                        }
+                    )
+                }
+            }
+            cancelButton()
+        }
+    }
 }

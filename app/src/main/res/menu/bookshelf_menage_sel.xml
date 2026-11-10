@@ -29,4 +29,8 @@
         android:id="@+id/menu_check_selected_interval"
         android:title="@string/check_selected_interval" />
 
+    <item
+        android:id="@+id/menu_batch_organize"
+        android:title="@string/batch_organize" />
+
 </menu>

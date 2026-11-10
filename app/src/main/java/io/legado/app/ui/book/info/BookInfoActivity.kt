@@ -786,9 +786,10 @@ class BookInfoActivity :
                 selector(
                     getString(R.string.organize_metadata),
                     displayItems
-                ) { _, position ->
+                ) { dialog, position ->
                     val chosen = scored[position].candidate
                     showDiffAndConfirm(book, chosen)
+                    dialog.dismiss()
                 }
             } catch (e: Exception) {
                 upLoading(false)

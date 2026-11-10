@@ -3,7 +3,7 @@ name: LingGan Reader APK
 on:
   push:
     branches:
-      - copilot/linggan-reader
+      - master
   workflow_dispatch:
 
 permissions:

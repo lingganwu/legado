@@ -24,8 +24,64 @@ import kotlinx.coroutines.withContext
 object AiBookMetadataHelp {
 
     /**
-     * 搜索候选元数据（使用 App 内置书源搜索，搜索所有启用的书源）
+     * 批量搜索候选元数据（使用 App 内置书源搜索，搜索所有启用的书源）
+     * 只返回至少有一个字段为空的书籍
      */
+    suspend fun searchBatchCandidates(
+        books: Set<Book>
+    ): List<Pair<Book, MetadataCandidate>> = coroutineScope {
+        val targets = books.filter {
+            it.customCoverUrl.isNullOrEmpty() ||
+                it.customIntro.isNullOrEmpty() ||
+                it.customTag.isNullOrEmpty()
+        }
+        if (targets.isEmpty()) return@coroutineScope emptyList()
+
+        val sourceParts = withContext(Dispatchers.IO) {
+            appDb.bookSourceDao.allEnabledPart
+        }
+        if (sourceParts.isEmpty()) return@coroutineScope emptyList()
+
+        val results = mutableListOf<Pair<Book, MetadataCandidate>>()
+        for (book in targets) {
+            val searchKey = if (book.name.isNotEmpty()) book.name else book.author
+            if (searchKey.isBlank()) continue
+            val candidates = flow {
+                for (bs in sourceParts) {
+                    bs.getBookSource()?.let { emit(it) }
+                }
+            }.mapParallelSafe(AppConfig.threadCount) { source ->
+                try {
+                    WebBook.searchBookAwait(source, searchKey, 1)
+                } catch (e: Exception) {
+                    AppLog.put("批量元数据搜索出错: ${e.message}", e)
+                    emptyList<SearchBook>()
+                }
+            }.toList().flatten()
+
+            // 去重：同名同作者只保留第一个来源
+            val seen = hashSetOf<String>()
+            val unique = candidates.filter { sb ->
+                seen.add("${sb.name}|${sb.author}")
+            }
+
+            if (unique.isNotEmpty()) {
+                val sb = unique[0]
+                results.add(book to MetadataCandidate(
+                    name = sb.name,
+                    author = sb.author,
+                    kind = sb.kind,
+                    intro = sb.intro,
+                    coverUrl = sb.coverUrl,
+                    authorIntro = null,
+                    sourceName = sb.originName,
+                    sourceUrl = sb.bookUrl,
+                    confidence = 1.0f
+                ))
+            }
+        }
+        results
+    }
     suspend fun searchCandidates(
         name: String,
         author: String
@@ -54,8 +110,7 @@ object AiBookMetadataHelp {
         // 去重：同名同作者只保留第一个来源
         val seen = hashSetOf<String>()
         val unique = allResults.filter { sb ->
-            val key = "${sb.name}|${sb.author}"
-            seen.add(key)
+            seen.add("${sb.name}|${sb.author}")
         }
 
         unique.map { sb ->
