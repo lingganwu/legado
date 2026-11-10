@@ -33,6 +33,7 @@ import io.legado.app.help.book.isWebFile
 import io.legado.app.help.book.removeType
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.LocalConfig
+import io.legado.app.help.metadata.AiBookMetadataHelp
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.dialogs.selector
 import io.legado.app.lib.theme.accentColor
@@ -251,6 +252,11 @@ class BookInfoActivity :
             }
 
             R.id.menu_clear_cache -> viewModel.clearCache()
+            R.id.menu_organize_metadata -> {
+                viewModel.getBook()?.let { book ->
+                    organizeMetadata(book)
+                }
+            }
             R.id.menu_log -> showDialogFragment<AppLogDialog>()
             R.id.menu_split_long_chapter -> {
                 upLoading(true)
@@ -746,6 +752,92 @@ class BookInfoActivity :
             }
         } else {
             waitDialog.dismiss()
+        }
+    }
+
+    /**
+     * 整理书籍元数据
+     * 1. 用现有书源搜索同名书籍作为候选
+     * 2. 展示候选列表供用户选择
+     * 3. 确认后将结果写入 custom 字段
+     */
+    private fun organizeMetadata(book: Book) {
+        upLoading(true)
+        lifecycleScope.launch {
+            try {
+                val candidates = AiBookMetadataHelp.searchCandidates(
+                    book.name,
+                    book.author
+                )
+                if (candidates.isEmpty()) {
+                    upLoading(false)
+                    toastOnUi("未找到候选信息")
+                    return@launch
+                }
+                // 先按匹配度排序
+                val scored = AiBookMetadataHelp.matchCandidates(book, candidates)
+                val displayItems = scored.mapIndexed { idx, sc ->
+                    val c = sc.candidate
+                    "${idx + 1}. ${c.name} / ${c.author} (${c.sourceName}) ${if (sc.score > 0) "匹配度 ${sc.score.toInt()}%" else ""}"
+                }
+
+                selector(
+                    getString(R.string.organize_metadata),
+                    displayItems
+                ) { _, selected, _ ->
+                    val chosen = scored[selected].candidate
+                    showDiffAndConfirm(book, chosen)
+                }
+            } catch (e: Exception) {
+                upLoading(false)
+                toastOnUi("出错: ${e.message}")
+            }
+        }
+    }
+
+    private fun showDiffAndConfirm(book: Book, candidate: AiBookMetadataHelp.MetadataCandidate) {
+        val diffs = mutableListOf<String>()
+        if (book.customCoverUrl.isNullOrEmpty() && candidate.coverUrl?.isNotEmpty() == true) {
+            diffs.add("封面: (空) -> ${candidate.coverUrl}")
+        }
+        if (book.customIntro.isNullOrEmpty() && candidate.intro?.isNotEmpty() == true) {
+            diffs.add("简介: (空) -> ${candidate.intro?.take(50)}...")
+        }
+        if (book.customTag.isNullOrEmpty() && candidate.kind?.isNotEmpty() == true) {
+            diffs.add("分类: (空) -> ${candidate.kind}")
+        }
+        if (book.customAuthorIntro.isNullOrEmpty() && candidate.authorIntro?.isNotEmpty() == true) {
+            diffs.add("作者简介: (空) -> ${candidate.authorIntro?.take(50)}...")
+        }
+
+        if (diffs.isEmpty()) {
+            toastOnUi("无需更新的字段")
+            return
+        }
+
+        alert(getString(R.string.organize_metadata)) {
+            title("确认应用以下变更？")
+            message(diffs.joinToString("\n"))
+            positiveButton(R.string.ok) {
+                AiBookMetadataHelp.applyMetadata(
+                    book,
+                    candidate,
+                    onSuccess = { updated ->
+                        runOnUiThread {
+                            upLoading(false)
+                            toastOnUi("已应用元数据")
+                            viewModel.saveBook(updated)
+                        }
+                    },
+                    onError = { e ->
+                        runOnUiThread {
+                            upLoading(false)
+                            toastOnUi("应用失败: ${e.message}")
+                        }
+                    }
+                )
+            }
+            negativeButton(R.string.cancel) {}
         }
     }
 

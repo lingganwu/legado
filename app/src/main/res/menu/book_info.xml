@@ -25,6 +25,11 @@
         app:showAsAction="never" />
 
     <item
+        android:id="@+id/menu_organize_metadata"
+        android:title="@string/organize_metadata"
+        app:showAsAction="never" />
+
+    <item
         android:id="@+id/menu_login"
         android:title="@string/login"
         app:showAsAction="never" />

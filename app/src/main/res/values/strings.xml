@@ -29,6 +29,7 @@
     <string name="dynamic_loading">Loading</string>
     <string name="draw">Warning</string>
     <string name="edit">Edit</string>
+    <string name="organize_metadata">整理书籍信息</string>
     <string name="delete">Delete</string>
     <string name="delete_select_group">Delete Select Group</string>
     <string name="delete_all">Delete all</string>

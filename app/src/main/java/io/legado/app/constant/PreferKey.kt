@@ -171,3 +171,9 @@ object PreferKey {
     const val contentSelectSpeakMod = "contentReadAloudMod"
 
 }
+
+    // AI metadata matching
+    const val aiApiUrl = "aiApiUrl"
+    const val aiApiKey = "aiApiKey"
+    const val aiModel = "aiModel"
+    const val aiPromptTemplate = "aiPromptTemplate"
