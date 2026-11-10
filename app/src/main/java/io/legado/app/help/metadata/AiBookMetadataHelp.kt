@@ -7,13 +7,12 @@ import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.help.config.AppConfig
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.data.entities.Book
-import io.legado.app.utils.AppLog
+import io.legado.app.constant.AppLog
 import io.legado.app.utils.mapParallelSafe
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.mapParallelSafe
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -123,12 +122,9 @@ object AiBookMetadataHelp {
                 if (customTag.isNullOrEmpty() && candidate.kind?.isNotEmpty() == true) {
                     customTag = candidate.kind
                 }
-                if (customAuthorIntro.isNullOrEmpty() && candidate.authorIntro?.isNotEmpty() == true) {
-                    customAuthorIntro = candidate.authorIntro
-                }
             }
             // 保存到数据库
-            appDb.bookDao.updateBook(updated)
+            appDb.bookDao.update(updated)
             // 记录 AI 匹配结果
             val meta = AiBookMetadata(
                 bookUrl = book.bookUrl,

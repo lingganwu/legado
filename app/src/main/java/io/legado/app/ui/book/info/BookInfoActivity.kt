@@ -797,7 +797,7 @@ class BookInfoActivity :
         }
     }
 
-    private fun showDiffAndConfirm(book: Book, candidate: AiBookMetadataHelp.MetadataCandidate) {
+    private fun showDiffAndConfirm(book: Book, candidate: MetadataCandidate) {
         val diffs = mutableListOf<String>()
         if (book.customCoverUrl.isNullOrEmpty() && candidate.coverUrl?.isNotEmpty() == true) {
             diffs.add("封面: (空) -> ${candidate.coverUrl}")
@@ -807,9 +807,6 @@ class BookInfoActivity :
         }
         if (book.customTag.isNullOrEmpty() && candidate.kind?.isNotEmpty() == true) {
             diffs.add("分类: (空) -> ${candidate.kind}")
-        }
-        if (book.customAuthorIntro.isNullOrEmpty() && candidate.authorIntro?.isNotEmpty() == true) {
-            diffs.add("作者简介: (空) -> ${candidate.authorIntro?.take(50)}...")
         }
 
         if (diffs.isEmpty()) {
@@ -821,23 +818,25 @@ class BookInfoActivity :
             title("确认应用以下变更？")
             message(diffs.joinToString("\n"))
             positiveButton(R.string.ok) {
-                AiBookMetadataHelp.applyMetadata(
-                    book,
-                    candidate,
-                    onSuccess = { updated ->
-                        runOnUiThread {
-                            upLoading(false)
-                            toastOnUi("已应用元数据")
-                            viewModel.saveBook(updated)
+                lifecycleScope.launch {
+                    AiBookMetadataHelp.applyMetadata(
+                        book,
+                        candidate,
+                        onSuccess = { updated ->
+                            runOnUiThread {
+                                upLoading(false)
+                                toastOnUi("已应用元数据")
+                                viewModel.saveBook(updated)
+                            }
+                        },
+                        onError = { e ->
+                            runOnUiThread {
+                                upLoading(false)
+                                toastOnUi("应用失败: ${e.message}")
+                            }
                         }
-                    },
-                    onError = { e ->
-                        runOnUiThread {
-                            upLoading(false)
-                            toastOnUi("应用失败: ${e.message}")
-                        }
-                    }
-                )
+                    )
+                }
             }
             negativeButton(R.string.cancel) {}
         }
